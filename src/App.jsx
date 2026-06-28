@@ -9,12 +9,18 @@ import ComplianceReport from './ComplianceReport'
 import Receipt from './Receipt'
 import IssueReturn from './IssueReturn'
 import ProductsControl from './ProductsControl'
+import AssetIntake from './AssetIntake'
+import UncodedAssets from './UncodedAssets'
+import AssetMove from './AssetMove'
 import './App.css'
 
 const VIEWS = {
   stock:       { label: 'Stock on hand',  component: StockOnHand },
   stocklevels: { label: 'Stock levels',   component: StockLevels },
   assets:      { label: 'Asset register', component: AssetRegister },
+  assetintake: { label: 'Asset intake',   component: AssetIntake },
+  uncoded:     { label: 'Uncoded assets', component: UncodedAssets },
+  assetmove:   { label: 'Asset move',     component: AssetMove },
   compliance:  { label: 'Compliance',     component: ComplianceReport },
   receipt:     { label: 'Receive stock',  component: Receipt },
   issue:       { label: 'Issue / return', component: IssueReturn },
