@@ -5,27 +5,54 @@ import Login from './Login'
 import StockOnHand from './StockOnHand'
 import StockLevels from './StockLevels'
 import AssetRegister from './AssetRegister'
+import AssetIntake from './AssetIntake'
+import UncodedAssets from './UncodedAssets'
+import AssetMove from './AssetMove'
 import ComplianceReport from './ComplianceReport'
 import Receipt from './Receipt'
 import IssueReturn from './IssueReturn'
 import ProductsControl from './ProductsControl'
-import AssetIntake from './AssetIntake'
-import UncodedAssets from './UncodedAssets'
-import AssetMove from './AssetMove'
 import './App.css'
 
-const VIEWS = {
-  stock:       { label: 'Stock on hand',  component: StockOnHand },
-  stocklevels: { label: 'Stock levels',   component: StockLevels },
-  assets:      { label: 'Asset register', component: AssetRegister },
-  assetintake: { label: 'Asset intake',   component: AssetIntake },
-  uncoded:     { label: 'Uncoded assets', component: UncodedAssets },
-  assetmove:   { label: 'Asset move',     component: AssetMove },
-  compliance:  { label: 'Compliance',     component: ComplianceReport },
-  receipt:     { label: 'Receive stock',  component: Receipt },
-  issue:       { label: 'Issue / return', component: IssueReturn },
-  products:    { label: 'Products',       component: ProductsControl },
+// Screens, unchanged — just the component for each key.
+const SCREENS = {
+  stock:       StockOnHand,
+  stocklevels: StockLevels,
+  assets:      AssetRegister,
+  assetintake: AssetIntake,
+  uncoded:     UncodedAssets,
+  assetmove:   AssetMove,
+  compliance:  ComplianceReport,
+  receipt:     Receipt,
+  issue:       IssueReturn,
+  products:    ProductsControl,
 }
+
+// The same screens, now organised into named groups for the sidebar.
+const NAV_GROUPS = [
+  { heading: 'Stock', items: [
+    { key: 'stock',       label: 'Stock on hand' },
+    { key: 'stocklevels', label: 'Stock levels' },
+  ]},
+  { heading: 'Assets', items: [
+    { key: 'assets',      label: 'Asset register' },
+    { key: 'assetintake', label: 'Asset intake' },
+    { key: 'uncoded',     label: 'Uncoded assets' },
+    { key: 'compliance',  label: 'Compliance' },
+  ]},
+  { heading: 'Movements', items: [
+    { key: 'receipt',     label: 'Receive stock' },
+    { key: 'issue',       label: 'Issue / return' },
+    { key: 'assetmove',   label: 'Asset move' },
+  ]},
+  { heading: 'Admin', items: [
+    { key: 'products',    label: 'Products' },
+  ]},
+]
+
+const LABELS = Object.fromEntries(
+  NAV_GROUPS.flatMap((g) => g.items.map((i) => [i.key, i.label]))
+)
 
 const EMPTY_RECEIPT = { our_order_ref: '', supplier_order_ref: '', lines: [] }
 const EMPTY_PICK = { mode: 'issue', project_id: '', lines: [] }
@@ -34,6 +61,7 @@ export default function App() {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('stock')
+  const [navOpen, setNavOpen] = useState(false)        // phone menu open?
   const [receiptForm, setReceiptForm] = useState(EMPTY_RECEIPT)
   const [pickForm, setPickForm] = useState(EMPTY_PICK)
 
@@ -52,34 +80,52 @@ export default function App() {
     await supabase.auth.signOut()
   }
 
+  function pick(key) {
+    setView(key)
+    setNavOpen(false)        // choosing a screen closes the phone menu
+  }
+
   if (loading) return <div className="app-loading">Loading…</div>
   if (!session) return <Login />
 
-  const ActiveScreen = VIEWS[view].component
+  const ActiveScreen = SCREENS[view]
 
   return (
     <div className="app-shell">
       <header className="app-header">
-        <h1>Stock App</h1>
+        <div className="header-left">
+          <button className="hamburger" onClick={() => setNavOpen(!navOpen)} aria-label="Menu">☰</button>
+          <h1>Stock App</h1>
+        </div>
         <div className="app-user">
-          <span>{session.user.email}</span>
+          <span className="user-email">{session.user.email}</span>
           <button onClick={handleLogout}>Sign out</button>
         </div>
       </header>
+
       <div className="app-body">
-        <nav className="app-nav">
-          {Object.entries(VIEWS).map(([key, { label }]) => (
-            <button
-              key={key}
-              className={key === view ? 'nav-item active' : 'nav-item'}
-              onClick={() => setView(key)}
-            >
-              {label}
-            </button>
+        {/* Backdrop shown behind the menu on phones; tap to close */}
+        {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
+
+        <nav className={navOpen ? 'app-nav open' : 'app-nav'}>
+          {NAV_GROUPS.map((group) => (
+            <div key={group.heading} className="nav-group">
+              <div className="nav-heading">{group.heading}</div>
+              {group.items.map((item) => (
+                <button
+                  key={item.key}
+                  className={item.key === view ? 'nav-item active' : 'nav-item'}
+                  onClick={() => pick(item.key)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
           ))}
         </nav>
+
         <main className="app-main">
-          <h2>{VIEWS[view].label}</h2>
+          <h2>{LABELS[view]}</h2>
           <ActiveScreen
             receiptForm={receiptForm}
             setReceiptForm={setReceiptForm}
