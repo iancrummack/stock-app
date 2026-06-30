@@ -38,7 +38,7 @@ export default function AssetMove() {
     async function loadRef() {
       const [{ data: projs }, { data: ppl }] = await Promise.all([
         supabase.from('projects').select('id, code, name').eq('is_active', true).order('code'),
-        supabase.from('people').select('id, name').order('name'),
+        supabase.from('people').select('id, name, can_hold_assets, is_active').order('name'),
       ])
       setProjects(projs || [])
       setPeople(ppl || [])
@@ -143,12 +143,21 @@ export default function AssetMove() {
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
               </select>
             </div>
-            <div className="form-field">
+              <div className="form-field">
               <label>Holder (optional)</label>
               <select value={holderId} onChange={(e) => setHolderId(e.target.value)}>
                 <option value="">— no holder —</option>
                 {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
+              {holderId && people.find((p) => String(p.id) === String(holderId) && (!p.can_hold_assets || !p.is_active)) && (
+                <div className="form-warning">
+                  {(() => {
+                    const person = people.find((p) => String(p.id) === String(holderId))
+                    if (person && !person.is_active) return 'This person is marked inactive (left the business). You can still assign it, but check it\'s right.'
+                    return 'This person isn\'t set up to hold assets. You can still assign it, but check it\'s the right person.'
+                  })()}
+                </div>
+              )}
             </div>
           </div>
 

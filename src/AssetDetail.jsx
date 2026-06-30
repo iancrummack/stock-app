@@ -27,11 +27,11 @@ export default function AssetDetail({ assetId, onClose, onChanged }) {
       supabase.from('assets')
         .select('id, asset_code, condition, status, product_id, products(name), location_id, locations(code, name), project_id, projects(code, name), holder_id, people(name)')
         .eq('id', assetId).single(),
-      supabase.from('asset_compliance').select('compliance_type, expiry_date, last_done').eq('asset_id', assetId).order('expiry_date'),
+      supabase.from('asset_compliance').select('id, compliance_type, expiry_date, last_done').eq('asset_id', assetId).order('expiry_date'),
       supabase.from('asset_events').select('event_type, status, condition, created_at, location_id, project_id, holder_id, note').eq('asset_id', assetId).order('created_at', { ascending: false }),
       supabase.from('locations').select('id, code, name').order('code'),
       supabase.from('projects').select('id, code, name').eq('is_active', true).order('code'),
-      supabase.from('people').select('id, name').eq('is_active', true).order('name'),
+      supabase.from('people').select('id, name, can_hold_assets').eq('is_active', true).order('name'),
       supabase.from('service_types').select('id, name').order('name'),
     ])
     if (a.error) setError(a.error.message)
@@ -70,7 +70,7 @@ export default function AssetDetail({ assetId, onClose, onChanged }) {
       condition: asset.condition, status: asset.status,
       location_id: asset.location_id || '', project_id: asset.project_id || '',
       holder_id: asset.holder_id || '', where: asset.project_id ? 'site' : 'store',
-      service_type_id: '', expiry_date: '', last_done: '',
+      service_type_id: '', expiry_date: '', last_done: '', editing_id: null,
       new_code: asset.asset_code || '',
     })
     setConfirmRecode(false)
@@ -110,39 +110,56 @@ export default function AssetDetail({ assetId, onClose, onChanged }) {
     if (!form.service_type_id) { setError('Choose a service type.'); return }
     if (!form.expiry_date) { setError('Set an expiry date.'); return }
     const svcName = serviceTypes.find((s) => String(s.id) === String(form.service_type_id))?.name
+
+    // Prefer the row we clicked (by id); else match by type for the "+ Add" path.
+    const existing = form.editing_id
+      ? compliance.find((c) => c.id === form.editing_id)
+      : compliance.find((c) => c.compliance_type === svcName)
+
     setSaving(true)
-    const { error } = await supabase.from('asset_compliance').insert({
-      asset_id: assetId, compliance_type: svcName, expiry_date: form.expiry_date, last_done: form.last_done || null,
-    })
+    if (existing) {
+      const { error: upErr } = await supabase.from('asset_compliance')
+        .update({ expiry_date: form.expiry_date, last_done: form.last_done || null, compliance_type: svcName })
+        .eq('id', existing.id)
+      if (upErr) { setSaving(false); setError(upErr.message); return }
+      await supabase.from('asset_events').insert({
+        asset_id: assetId, event_type: 'condition_change', status: asset.status, condition: asset.condition,
+        location_id: asset.location_id, project_id: asset.project_id, holder_id: asset.holder_id,
+        note: `${svcName}: ${existing.expiry_date || '(none)'} → ${form.expiry_date}`,
+      })
+    } else {
+      const { error: insErr } = await supabase.from('asset_compliance').insert({
+        asset_id: assetId, compliance_type: svcName, expiry_date: form.expiry_date, last_done: form.last_done || null,
+      })
+      if (insErr) { setSaving(false); setError(insErr.message); return }
+      await supabase.from('asset_events').insert({
+        asset_id: assetId, event_type: 'condition_change', status: asset.status, condition: asset.condition,
+        location_id: asset.location_id, project_id: asset.project_id, holder_id: asset.holder_id,
+        note: `${svcName} set to ${form.expiry_date}`,
+      })
+    }
     setSaving(false)
-    if (error) { setError(error.message); return }
     setMode('view'); await load(); if (onChanged) onChanged()
   }
 
-  // Recode: change the asset's code, then log a 'recoded' event.
   async function saveRecode() {
     setError(null)
     const newCode = (form.new_code || '').trim()
     if (!newCode) { setError('Enter the new code.'); return }
     if (newCode === asset.asset_code) { setError('That’s the same as the current code.'); return }
-
     setSaving(true)
-    // 1. Update the code (the unique index rejects a clash).
-    const { error: upErr } = await supabase.from('assets').update({ asset_code: newCode }).eq('id', assetId)
-    if (upErr) {
-      setSaving(false)
-      if (upErr.code === '23505' || upErr.message.toLowerCase().includes('duplicate')) {
-        setError(`Code "${newCode}" is already used by another asset.`)
-      } else setError(upErr.message)
-      return
-    }
-    // 2. Log the change in history.
-    await supabase.from('asset_events').insert({
-      asset_id: assetId, event_type: 'recoded', status: asset.status, condition: asset.condition,
-      location_id: asset.location_id, project_id: asset.project_id, holder_id: asset.holder_id,
-      note: `Recoded from ${asset.asset_code || '(none)'} to ${newCode}`,
+    // One atomic call: changes the code and logs the event together.
+    const { error } = await supabase.rpc('recode_asset', {
+      p_asset_id: assetId,
+      p_new_code: newCode,
     })
     setSaving(false)
+    if (error) {
+      if (error.code === '23505' || error.message.toLowerCase().includes('duplicate')) {
+        setError(`Code "${newCode}" is already used by another asset.`)
+      } else setError(error.message)
+      return
+    }
     setMode('view'); await load(); if (onChanged) onChanged()
   }
 
@@ -216,6 +233,11 @@ export default function AssetDetail({ assetId, onClose, onChanged }) {
                     <option value="">— no holder —</option>
                     {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
+                  {form.holder_id && people.find((p) => String(p.id) === String(form.holder_id) && !p.can_hold_assets) && (
+                    <div className="form-warning">
+                      This person isn't set up to hold assets. You can still assign it, but check it's the right person.
+                    </div>
+                  )}
                   <div className="detail-edit-actions">
                     <button onClick={saveMove} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
                     <button className="btn-secondary" onClick={() => setMode('view')} disabled={saving}>Cancel</button>
@@ -297,10 +319,21 @@ export default function AssetDetail({ assetId, onClose, onChanged }) {
                 <table className="detail-table">
                   <thead><tr><th>Check</th><th>Expires</th><th>Last done</th><th></th></tr></thead>
                   <tbody>
-                    {compliance.map((c, i) => {
+                    {compliance.map((c) => {
                       const overdue = c.expiry_date && new Date(c.expiry_date) < new Date()
                       return (
-                        <tr key={i} className={overdue ? 'row-critical' : ''}>
+                        <tr key={c.id} className={overdue ? 'row-critical clickable-row' : 'clickable-row'}
+                            onClick={() => {
+                              const svc = serviceTypes.find((s) => s.name === c.compliance_type)
+                              setForm({
+                                ...form,
+                                editing_id: c.id,
+                                service_type_id: svc ? String(svc.id) : '',
+                                expiry_date: c.expiry_date || '',
+                                last_done: c.last_done || '',
+                              })
+                              setMode('service'); setError(null)
+                            }}>
                           <td>{c.compliance_type}</td><td>{c.expiry_date || '—'}</td><td>{c.last_done || '—'}</td><td>{daysLabel(c.expiry_date)}</td>
                         </tr>
                       )

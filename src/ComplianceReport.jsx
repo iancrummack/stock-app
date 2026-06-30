@@ -1,6 +1,7 @@
 // src/ComplianceReport.jsx
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
+import * as XLSX from 'xlsx'
 
 export default function ComplianceReport() {
   const [rows, setRows] = useState([])
@@ -37,8 +38,30 @@ export default function ComplianceReport() {
     return ''
   }
 
+  function exportToExcel() {
+    // Export whatever's currently shown (respects the on-site toggle).
+    const exportRows = visible.map((r) => ({
+      Type: r.asset_type || '',
+      Code: r.asset_code || '',
+      Check: r.compliance_type || '',
+      Expiry: r.expiry_date || '',
+      'Days left': r.days_remaining ?? '',
+      Position: r.current_position || '',
+      Holder: r.holder || '',
+    }))
+    const worksheet = XLSX.utils.json_to_sheet(exportRows)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Compliance')
+    const today = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(workbook, `compliance-${today}.xlsx`)
+  }
+
   return (
     <div>
+      <div className="list-actions">
+        <button onClick={exportToExcel} disabled={visible.length === 0}>Export to Excel</button>
+      </div>
+
       <label className="filter-toggle">
         <input
           type="checkbox"

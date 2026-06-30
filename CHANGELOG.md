@@ -2,6 +2,22 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.7.0] - 2026-06-30
+### Added
+- Pick lists: upload-ready pick system where a job reserves stock until it's picked or cancelled
+- Stock availability now accounts for what's committed to open picks, so concurrent jobs see each other's reservations
+- Warehouse pick screen: work a job's lines in warehouse-route order, enter picked quantities, tick specific asset units, assign a holder, and commit
+- Picks complete cleanly or "with issues" if anything fell short, and the buyer sees the status
+- Cancel a job to release its reserved stock, with a confirmation
+- Bay contents view: pick a bay to see the consumables homed there and the assets currently in it
+- Excel export on the compliance screen
+- Asset/consumable filter on the Products screen
+- Holder permission warnings when assigning assets to someone not set up to hold them
+
+### Changed
+- Re-coding an asset is now a single atomic operation
+- Re-testing a service overwrites the existing date rather than adding a duplicate, with the change recorded in history
+
 ## [0.6.0] - 2026-06-30
 ### Added
 - Service types: a managed list of service/compliance types (admin screen)

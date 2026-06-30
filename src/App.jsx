@@ -17,6 +17,8 @@ import PeopleControl from './PeopleControl'
 import ChangelogModal from './ChangelogModal'
 import ServiceTypesControl from './ServiceTypesControl'
 import AssetTypeServices from './AssetTypeServices'
+import BayView from './BayView'
+import PickList from './PickList'
 import './App.css'
 
 // Screens, unchanged — just the component for each key.
@@ -35,13 +37,17 @@ const SCREENS = {
   people:      PeopleControl,
   servicetypes: ServiceTypesControl,
   assettypeservices: AssetTypeServices,
+  bayview: BayView,
+  picklist: PickList,
 }
 
 // The same screens, now organised into named groups for the sidebar.
 const NAV_GROUPS = [
   { heading: 'Stock', items: [
+    { key: 'bayview',     label: 'Bay contents' },
     { key: 'stock',       label: 'Stock on hand' },
     { key: 'stocklevels', label: 'Stock levels' },
+
   ]},
   { heading: 'Assets', items: [
     { key: 'assets',      label: 'Asset register' },
@@ -53,6 +59,7 @@ const NAV_GROUPS = [
     { key: 'receipt',     label: 'Receive stock' },
     { key: 'issue',       label: 'Issue / return' },
     { key: 'assetmove',   label: 'Asset move' },
+    { key: 'picklist',  label: 'Pick lists' },
   ]},
    { heading: 'Admin', items: [
     { key: 'products',          label: 'Products' },

@@ -23,9 +23,10 @@ export default function ProductsControl() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const [editing, setEditing] = useState(false)   // showing the form?
+  const [editing, setEditing] = useState(false)
   const [form, setForm] = useState(EMPTY)
-  const [status, setStatus] = useState(null)       // null | 'saving'
+  const [status, setStatus] = useState(null)
+  const [typeFilter, setTypeFilter] = useState('all')   // all | quantity | asset
 
   async function loadProducts() {
     const { data, error } = await supabase
@@ -36,7 +37,6 @@ export default function ProductsControl() {
     else setProducts(data || [])
   }
 
-  // Load the products list and every dropdown source once, on open.
   useEffect(() => {
     async function loadAll() {
       setLoading(true)
@@ -59,11 +59,7 @@ export default function ProductsControl() {
     loadAll()
   }, [])
 
-  function startNew() {
-    setForm(EMPTY)
-    setEditing(true)
-    setError(null)
-  }
+  function startNew() { setForm(EMPTY); setEditing(true); setError(null) }
 
   function startEdit(p) {
     setForm({
@@ -81,15 +77,8 @@ export default function ProductsControl() {
     setError(null)
   }
 
-  function cancel() {
-    setEditing(false)
-    setForm(EMPTY)
-    setError(null)
-  }
-
-  function setField(field, value) {
-    setForm({ ...form, [field]: value })
-  }
+  function cancel() { setEditing(false); setForm(EMPTY); setError(null) }
+  function setField(field, value) { setForm({ ...form, [field]: value }) }
 
   async function handleSave() {
     setError(null)
@@ -97,8 +86,6 @@ export default function ProductsControl() {
     if (!form.name.trim()) { setError('Please enter a product name.'); return }
 
     const isAsset = form.tracking_type === 'asset'
-
-    // Asset products carry no unit and no home bay — those are consumable concepts.
     const row = {
       code: form.code.trim(),
       name: form.name.trim(),
@@ -111,29 +98,21 @@ export default function ProductsControl() {
     }
 
     setStatus('saving')
-    // Has an id → update that row. No id → insert a new one.
     const result = form.id
       ? await supabase.from('products').update(row).eq('id', form.id)
       : await supabase.from('products').insert(row)
     setStatus(null)
 
-    if (result.error) {
-      setError(result.error.message)
-    } else {
-      await loadProducts()
-      setEditing(false)
-      setForm(EMPTY)
-    }
+    if (result.error) setError(result.error.message)
+    else { await loadProducts(); setEditing(false); setForm(EMPTY) }
   }
 
-  // Show names rather than raw ids in the list.
   const unitName = (id) => units.find((x) => x.id === id)?.name || '—'
   const ownerName = (id) => owners.find((x) => x.id === id)?.name || '—'
   const categoryName = (id) => categories.find((x) => x.id === id)?.name || '—'
 
   if (loading) return <p>Loading products…</p>
 
-  // ---- Create / edit form ----
   if (editing) {
     const isAsset = form.tracking_type === 'asset'
     return (
@@ -211,15 +190,27 @@ export default function ProductsControl() {
     )
   }
 
-  // ---- Products list ----
+  // Apply the type filter before rendering the list.
+  const visible = typeFilter === 'all' ? products : products.filter((p) => p.tracking_type === typeFilter)
+
   return (
     <div>
       <div className="list-actions">
         <button onClick={startNew}>+ New product</button>
       </div>
+
+      <div className="filter-summary">
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.85rem' }}>
+          <option value="all">All products</option>
+          <option value="quantity">Consumables only</option>
+          <option value="asset">Assets only</option>
+        </select>
+        <span>{visible.length} of {products.length}</span>
+      </div>
+
       {error && <div className="form-error">{error}</div>}
-      {products.length === 0 ? (
-        <p>No products yet.</p>
+      {visible.length === 0 ? (
+        <p>No products to show.</p>
       ) : (
         <table className="data-table">
           <thead>
@@ -234,7 +225,7 @@ export default function ProductsControl() {
             </tr>
           </thead>
           <tbody>
-            {products.map((p) => (
+            {visible.map((p) => (
               <tr key={p.id}>
                 <td>{p.code}</td>
                 <td>{p.name}</td>
