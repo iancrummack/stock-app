@@ -53,7 +53,11 @@ export default function AssetIntake() {
     } else {
       const typeName = assetTypes.find((t) => String(t.id) === String(productId))?.name || 'assets'
       setResult(`Logged ${n} ${typeName} as awaiting code. Find them on the Uncoded assets screen to sticker up.`)
+      // Reset the whole form, ready for the next batch.
+      setProductId('')
       setCount('')
+      setCondition('new')
+      setLocationId('')
     }
   }
 

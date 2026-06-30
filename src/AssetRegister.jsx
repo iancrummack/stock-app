@@ -1,6 +1,8 @@
 // src/AssetRegister.jsx
 import { useState, useEffect, useMemo } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from './supabaseClient'
+import AssetDetail from './AssetDetail'
 
 export default function AssetRegister() {
   const [rows, setRows] = useState([])
@@ -13,21 +15,21 @@ export default function AssetRegister() {
   const [fStatus, setFStatus] = useState('')
   const [fPosition, setFPosition] = useState('')
   const [fHolder, setFHolder] = useState('')
+  const [openId, setOpenId] = useState(null)
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true)
-      setError(null)
-      const { data, error } = await supabase
-        .from('asset_register')
-        .select('*')
-        .order('asset_type', { ascending: true })
-      if (error) setError(error.message)
-      else setRows(data || [])
-      setLoading(false)
-    }
-    load()
-  }, [])
+  async function load(isRefresh) {
+    if (!isRefresh) setLoading(true)
+    setError(null)
+    const { data, error } = await supabase
+      .from('asset_register')
+      .select('*')
+      .order('asset_type', { ascending: true })
+    if (error) setError(error.message)
+    else setRows(data || [])
+    if (!isRefresh) setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
 
   const options = useMemo(() => {
     const uniq = (key) => [...new Set(rows.map((r) => r[key]).filter((v) => v != null && v !== ''))].sort()
@@ -58,6 +60,23 @@ export default function AssetRegister() {
 
   function clearFilters() {
     setSearch(''); setFType(''); setFCondition(''); setFStatus(''); setFPosition(''); setFHolder('')
+  }
+
+  function exportToExcel() {
+    // Export exactly what's filtered on screen, with friendly column names.
+    const exportRows = visible.map((r) => ({
+      Code: r.asset_code || '',
+      Type: r.asset_type || '',
+      Condition: r.condition || '',
+      Status: r.status || '',
+      Position: r.current_position || '',
+      Holder: r.holder || '',
+    }))
+    const worksheet = XLSX.utils.json_to_sheet(exportRows)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Asset register')
+    const today = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(workbook, `asset-register-${today}.xlsx`)
   }
 
   const anyFilter = search || fType || fCondition || fStatus || fPosition || fHolder
@@ -99,6 +118,10 @@ export default function AssetRegister() {
         </div>
       </div>
 
+      <div className="list-actions">
+        <button onClick={exportToExcel} disabled={visible.length === 0}>Export to Excel</button>
+      </div>
+
       <div className="filter-summary">
         <span>{visible.length} of {rows.length} assets</span>
         {anyFilter && <button className="btn-link" onClick={clearFilters}>Clear filters</button>}
@@ -120,7 +143,7 @@ export default function AssetRegister() {
           </thead>
           <tbody>
             {visible.map((r) => (
-              <tr key={r.asset_id}>
+              <tr key={r.asset_id} className="clickable-row" onClick={() => setOpenId(r.asset_id)}>
                 <td>{r.asset_code || '—'}</td>
                 <td>{r.asset_type}</td>
                 <td>{r.condition}</td>
@@ -132,6 +155,14 @@ export default function AssetRegister() {
           </tbody>
         </table>
       )}
+    {openId && (
+        <AssetDetail
+          assetId={openId}
+          onClose={() => setOpenId(null)}
+          onChanged={() => load(true)}
+        />
+      )}
     </div>
   )
 }
+

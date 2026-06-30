@@ -12,6 +12,11 @@ import ComplianceReport from './ComplianceReport'
 import Receipt from './Receipt'
 import IssueReturn from './IssueReturn'
 import ProductsControl from './ProductsControl'
+import ProjectsControl from './ProjectsControl'
+import PeopleControl from './PeopleControl'
+import ChangelogModal from './ChangelogModal'
+import ServiceTypesControl from './ServiceTypesControl'
+import AssetTypeServices from './AssetTypeServices'
 import './App.css'
 
 // Screens, unchanged — just the component for each key.
@@ -26,6 +31,10 @@ const SCREENS = {
   receipt:     Receipt,
   issue:       IssueReturn,
   products:    ProductsControl,
+  projects:    ProjectsControl,
+  people:      PeopleControl,
+  servicetypes: ServiceTypesControl,
+  assettypeservices: AssetTypeServices,
 }
 
 // The same screens, now organised into named groups for the sidebar.
@@ -45,8 +54,12 @@ const NAV_GROUPS = [
     { key: 'issue',       label: 'Issue / return' },
     { key: 'assetmove',   label: 'Asset move' },
   ]},
-  { heading: 'Admin', items: [
-    { key: 'products',    label: 'Products' },
+   { heading: 'Admin', items: [
+    { key: 'products',          label: 'Products' },
+    { key: 'projects',          label: 'Projects' },
+    { key: 'people',            label: 'People' },
+    { key: 'servicetypes',      label: 'Service types' },
+    { key: 'assettypeservices', label: 'Asset service rules' },
   ]},
 ]
 
@@ -64,6 +77,7 @@ export default function App() {
   const [navOpen, setNavOpen] = useState(false)        // phone menu open?
   const [receiptForm, setReceiptForm] = useState(EMPTY_RECEIPT)
   const [pickForm, setPickForm] = useState(EMPTY_PICK)
+  const [showChangelog, setShowChangelog] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -95,7 +109,14 @@ export default function App() {
       <header className="app-header">
         <div className="header-left">
           <button className="hamburger" onClick={() => setNavOpen(!navOpen)} aria-label="Menu">☰</button>
-          <h1>Stock App</h1>
+          <div className="brand">
+            <span className="brand-name">7Formation.co.uk</span>
+            <span className="brand-tag">Forward Thinking Construction Solutions</span>
+          </div>
+          <button className="version-badge" onClick={() => setShowChangelog(true)} title="View changelog">
+            v{__APP_VERSION__}
+          </button>
+          {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
         </div>
         <div className="app-user">
           <span className="user-email">{session.user.email}</span>

@@ -17,9 +17,13 @@ export default function UncodedAssets() {
       .select('id, condition, location_id, product_id, products(name), locations(code, name)')
       .eq('status', 'awaiting_code')
       .order('id')
-    if (error) setError(error.message)
-    else setRows(data || [])
-    setLoading(false)
+    if (error) { setError(error.message); setLoading(false); return }
+        setRows(data || [])
+        // Pre-fill each code box with the 7F prefix, ready to complete.
+        const seeded = {}
+        ;(data || []).forEach((a) => { seeded[a.id] = '7F' })
+        setCodes(seeded)
+        setLoading(false)
   }
 
   useEffect(() => { load() }, [])

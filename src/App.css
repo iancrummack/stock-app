@@ -196,3 +196,100 @@ body { margin: 0; background: #f4f5f7; color: #1a1a1a; }
   display: flex; align-items: center; gap: 1rem;
   max-width: 900px; margin-bottom: 0.75rem; font-size: 0.85rem; color: #666;
 }
+/* Branding */
+.brand { display: flex; flex-direction: column; line-height: 1.1; }
+.brand-name { font-size: 1.2rem; font-weight: 700; color: #1a1a1a; }
+.brand-tag { font-size: 0.65rem; color: #888; letter-spacing: 0.02em; }
+.version-badge {
+  font-size: 0.7rem; color: #555; background: #eef1f5;
+  border: 1px solid #dde3ea; border-radius: 10px; padding: 0.1rem 0.5rem;
+  align-self: center;
+}
+
+@media (max-width: 720px) {
+  .brand-tag { display: none; }   /* keep the header tidy on phones */
+}
+
+/* Asset detail panel */
+.clickable-row { cursor: pointer; }
+.clickable-row:hover { background: #f0f4ff; }
+
+.detail-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 40; }
+.detail-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 420px; max-width: 100%;
+  background: #fff; z-index: 50; box-shadow: -2px 0 16px rgba(0,0,0,0.15);
+  display: flex; flex-direction: column; overflow-y: auto;
+}
+.detail-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.25rem; border-bottom: 1px solid #eee; position: sticky; top: 0; background: #fff;
+}
+.detail-head h3 { margin: 0; font-size: 1.1rem; }
+.detail-close { background: none; border: none; font-size: 1.1rem; cursor: pointer; color: #666; }
+.detail-body { padding: 1rem 1.25rem; }
+.detail-section { margin-bottom: 1.5rem; }
+.detail-subhead { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: #888; margin: 0 0 0.6rem; }
+.detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.9rem; }
+.detail-label { display: block; font-size: 0.7rem; color: #999; text-transform: uppercase; letter-spacing: 0.03em; }
+.detail-empty { color: #888; font-size: 0.85rem; }
+.detail-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.detail-table th, .detail-table td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid #f0f0f0; }
+.detail-table th { color: #888; font-weight: 600; }
+.detail-timeline { list-style: none; margin: 0; padding: 0; }
+.detail-timeline li { display: flex; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid #f3f3f3; font-size: 0.85rem; }
+.timeline-when { color: #999; white-space: nowrap; min-width: 80px; }
+
+@media (max-width: 720px) {
+  .detail-panel { width: 100%; }   /* full screen on phones */
+}
+
+.detail-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1rem; }
+.btn-small {
+  border: none; border-radius: 6px; background: #2563eb; color: #fff;
+  padding: 0.4rem 0.8rem; font-size: 0.8rem; cursor: pointer;
+}
+.detail-edit {
+  margin-top: 1rem; padding: 0.9rem; background: #f7f9fc; border: 1px solid #e3e8f0;
+  border-radius: 8px; display: flex; flex-direction: column; gap: 0.5rem;
+}
+.detail-edit select {
+  padding: 0.5rem; border: 1px solid #ccc; border-radius: 6px; font-size: 0.9rem;
+}
+.detail-edit-actions { display: flex; gap: 0.5rem; margin-top: 0.3rem; }
+.detail-edit-actions button {
+  border: none; border-radius: 6px; background: #2563eb; color: #fff;
+  padding: 0.5rem 1rem; font-size: 0.85rem; cursor: pointer;
+}
+.detail-edit-actions .btn-secondary { background: #e5e7eb; color: #333; }
+
+/* Version badge as a button */
+.version-badge {
+  font-size: 0.7rem; color: #555; background: #eef1f5;
+  border: 1px solid #dde3ea; border-radius: 10px; padding: 0.1rem 0.5rem;
+  align-self: center; cursor: pointer;
+}
+.version-badge:hover { background: #e2e8f2; }
+
+/* Changelog modal */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 60;
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+}
+.modal-card {
+  background: #fff; border-radius: 10px; width: 100%; max-width: 560px;
+  max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+}
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 1rem 1.25rem; border-bottom: 1px solid #eee;
+}
+.modal-head h3 { margin: 0; font-size: 1.1rem; }
+.modal-body { padding: 1rem 1.5rem; overflow-y: auto; }
+
+/* Markdown styling */
+.markdown h1 { font-size: 1.3rem; margin: 0 0 0.5rem; }
+.markdown h2 { font-size: 1rem; margin: 1.2rem 0 0.4rem; color: #2563eb; }
+.markdown h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; color: #888; margin: 0.8rem 0 0.3rem; }
+.markdown ul { margin: 0.3rem 0 0.8rem; padding-left: 1.2rem; }
+.markdown li { font-size: 0.88rem; margin: 0.2rem 0; }
+.markdown p { font-size: 0.88rem; color: #555; }

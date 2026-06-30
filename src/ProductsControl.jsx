@@ -44,7 +44,7 @@ export default function ProductsControl() {
       const [prods, u, o, c, l] = await Promise.all([
         supabase.from('products').select('id, code, name, tracking_type, unit_id, owner_id, category_id, default_location_id, description').order('name'),
         supabase.from('units').select('id, name').order('name'),
-        supabase.from('owners').select('id, name').order('name'),
+        supabase.from('owners').select('id, name:owner').order('owner'),
         supabase.from('categories').select('id, name').order('name'),
         supabase.from('locations').select('id, code, name').order('code'),
       ])
