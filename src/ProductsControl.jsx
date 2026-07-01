@@ -1,5 +1,5 @@
 // src/ProductsControl.jsx
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from './supabaseClient'
 
 const EMPTY = {
@@ -26,7 +26,11 @@ export default function ProductsControl() {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState(EMPTY)
   const [status, setStatus] = useState(null)
-  const [typeFilter, setTypeFilter] = useState('all')   // all | quantity | asset
+
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [sortBy, setSortBy] = useState('name')   // 'name' | 'position'
 
   async function loadProducts() {
     const { data, error } = await supabase
@@ -110,6 +114,34 @@ export default function ProductsControl() {
   const unitName = (id) => units.find((x) => x.id === id)?.name || '—'
   const ownerName = (id) => owners.find((x) => x.id === id)?.name || '—'
   const categoryName = (id) => categories.find((x) => x.id === id)?.name || '—'
+  const locationName = (id) => {
+    const l = locations.find((x) => x.id === id)
+    return l ? `${l.code} — ${l.name}` : '—'
+  }
+  const locationSortKey = (id) => id ?? Number.MAX_SAFE_INTEGER
+
+  // Filter then sort the list.
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    let list = products.filter((p) => {
+      if (typeFilter !== 'all' && p.tracking_type !== typeFilter) return false
+      if (categoryFilter && String(p.category_id) !== String(categoryFilter)) return false
+      if (q) {
+        const cat = categoryName(p.category_id).toLowerCase()
+        const hay = `${p.code || ''} ${p.name || ''} ${cat}`.toLowerCase()
+        if (!hay.includes(q)) return false
+      }
+      return true
+    })
+    list = list.slice().sort((a, b) => {
+      if (sortBy === 'position') {
+        return locationSortKey(a.default_location_id) - locationSortKey(b.default_location_id)
+      }
+      return (a.name || '').localeCompare(b.name || '')
+    })
+    return list
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, typeFilter, categoryFilter, search, sortBy, categories])
 
   if (loading) return <p>Loading products…</p>
 
@@ -190,21 +222,38 @@ export default function ProductsControl() {
     )
   }
 
-  // Apply the type filter before rendering the list.
-  const visible = typeFilter === 'all' ? products : products.filter((p) => p.tracking_type === typeFilter)
-
   return (
     <div>
       <div className="list-actions">
         <button onClick={startNew}>+ New product</button>
       </div>
 
+      <div className="filter-bar">
+        <input
+          type="text"
+          className="filter-search"
+          placeholder="Search name, code or category"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <div className="filter-row">
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <option value="all">All products</option>
+            <option value="quantity">Consumables only</option>
+            <option value="asset">Assets only</option>
+          </select>
+          <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+            <option value="">Category: all</option>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+            <option value="name">Sort: Name (A–Z)</option>
+            <option value="position">Sort: Position (route order)</option>
+          </select>
+        </div>
+      </div>
+
       <div className="filter-summary">
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ padding: '0.4rem', borderRadius: '6px', border: '1px solid #ccc', fontSize: '0.85rem' }}>
-          <option value="all">All products</option>
-          <option value="quantity">Consumables only</option>
-          <option value="asset">Assets only</option>
-        </select>
         <span>{visible.length} of {products.length}</span>
       </div>
 
@@ -221,6 +270,7 @@ export default function ProductsControl() {
               <th>Unit</th>
               <th>Owner</th>
               <th>Category</th>
+              <th>Position</th>
               <th></th>
             </tr>
           </thead>
@@ -233,6 +283,7 @@ export default function ProductsControl() {
                 <td>{p.tracking_type === 'asset' ? '—' : unitName(p.unit_id)}</td>
                 <td>{ownerName(p.owner_id)}</td>
                 <td>{categoryName(p.category_id)}</td>
+                <td>{p.tracking_type === 'asset' ? '—' : locationName(p.default_location_id)}</td>
                 <td><button className="btn-link" onClick={() => startEdit(p)}>Edit</button></td>
               </tr>
             ))}

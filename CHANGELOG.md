@@ -2,6 +2,10 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.7.1] - 2026-07-01
+### Added
+- Search, category filter, and sort (by name or warehouse position) on the Products screen, with a Position column showing each consumable's home bay
+
 ## [0.7.0] - 2026-06-30
 ### Added
 - Pick lists: upload-ready pick system where a job reserves stock until it's picked or cancelled
