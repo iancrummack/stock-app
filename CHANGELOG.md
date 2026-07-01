@@ -2,6 +2,18 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.8.0] - 2026-07-01
+### Added
+- Upload pick list: create a trackable pick from the buyer's master list Excel file, reading the Site Set Up & Signage tab
+- The upload matches items by I.D, reads project, job number and collection date by their labels, and shows a full summary before creating anything
+- Problem rows (no I.D, unknown I.D, bad quantity, unmatched kit code) are flagged with their sheet row and reason, so nothing is silently dropped
+- Kits: define a lettered kit code (e.g. FT2) as a bundle of asset types, managed on a new admin screen
+- Kit codes on an upload expand automatically into their component asset lines
+- Kit items can be marked "fixed" so they don't scale with quantity (e.g. one WES base per job regardless of how many trolleys)
+
+### Fixed
+- Collection date now reads correctly from the spreadsheet (was mis-parsing the year and slipping a day)
+
 ## [0.7.1] - 2026-07-01
 ### Added
 - Search, category filter, and sort (by name or warehouse position) on the Products screen, with a Position column showing each consumable's home bay

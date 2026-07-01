@@ -19,6 +19,8 @@ import ServiceTypesControl from './ServiceTypesControl'
 import AssetTypeServices from './AssetTypeServices'
 import BayView from './BayView'
 import PickList from './PickList'
+import PickUpload from './PickUpload'
+import KitsControl from './KitsControl'
 import './App.css'
 
 // Screens, unchanged — just the component for each key.
@@ -39,6 +41,8 @@ const SCREENS = {
   assettypeservices: AssetTypeServices,
   bayview: BayView,
   picklist: PickList,
+  pickupload: PickUpload,
+  kits: KitsControl,
 }
 
 // The same screens, now organised into named groups for the sidebar.
@@ -59,6 +63,7 @@ const NAV_GROUPS = [
     { key: 'receipt',     label: 'Receive stock' },
     { key: 'issue',       label: 'Issue / return' },
     { key: 'assetmove',   label: 'Asset move' },
+    { key: 'pickupload', label: 'Upload pick list' },
     { key: 'picklist',  label: 'Pick lists' },
   ]},
    { heading: 'Admin', items: [
@@ -67,6 +72,7 @@ const NAV_GROUPS = [
     { key: 'people',            label: 'People' },
     { key: 'servicetypes',      label: 'Service types' },
     { key: 'assettypeservices', label: 'Asset service rules' },
+    { key: 'kits',              label: 'Kits' },
   ]},
 ]
 
