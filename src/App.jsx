@@ -21,6 +21,7 @@ import BayView from './BayView'
 import PickList from './PickList'
 import PickUpload from './PickUpload'
 import KitsControl from './KitsControl'
+import RolesControl from './RolesControl'
 import './App.css'
 
 // Screens, unchanged — just the component for each key.
@@ -43,6 +44,7 @@ const SCREENS = {
   picklist: PickList,
   pickupload: PickUpload,
   kits: KitsControl,
+  roles: RolesControl,
 }
 
 // The same screens, now organised into named groups for the sidebar.
@@ -73,6 +75,7 @@ const NAV_GROUPS = [
     { key: 'servicetypes',      label: 'Service types' },
     { key: 'assettypeservices', label: 'Asset service rules' },
     { key: 'kits',              label: 'Kits' },
+    { key: 'roles',             label: 'Roles' },
   ]},
 ]
 
@@ -91,14 +94,36 @@ export default function App() {
   const [receiptForm, setReceiptForm] = useState(EMPTY_RECEIPT)
   const [pickForm, setPickForm] = useState(EMPTY_PICK)
   const [showChangelog, setShowChangelog] = useState(false)
+  const [allowedScreens, setAllowedScreens] = useState(null)   // null = not yet loaded / fail-open
+  const [isSuper, setIsSuper] = useState(false)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        await supabase.from('profiles').upsert(
+          { id: session.user.id, email: session.user.email },
+          { onConflict: 'id', ignoreDuplicates: false }
+        )
+        await loadAccess(session.user.id)
+      }
       setSession(session)
       setLoading(false)
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => setSession(session)
+      async (_event, session) => {
+        if (session?.user) {
+          await supabase.from('profiles').upsert(
+            { id: session.user.id, email: session.user.email },
+            { onConflict: 'id', ignoreDuplicates: false }
+          )
+          await loadAccess(session.user.id)
+        } else {
+          // Signed out — reset access state.
+          setAllowedScreens(null)
+          setIsSuper(false)
+        }
+        setSession(session)
+      }
     )
     return () => subscription.unsubscribe()
   }, [])
@@ -116,6 +141,47 @@ export default function App() {
   if (!session) return <Login />
 
   const ActiveScreen = SCREENS[view]
+
+  async function loadAccess(userId) {
+    try {
+      // Find the person's role.
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role_id, roles(code)')
+        .eq('id', userId)
+        .single()
+
+      // Super users see everything — no filtering.
+      if (profile?.roles?.code === 'super') {
+        setIsSuper(true)
+        setAllowedScreens(null)   // null = show all
+        return
+      }
+      setIsSuper(false)
+
+      // No role assigned → fail open (show everything) for the beta.
+      if (!profile?.role_id) {
+        setAllowedScreens(null)
+        return
+      }
+
+      // Read this role's allowed screens.
+      const { data: rs } = await supabase
+        .from('role_screens')
+        .select('screen_key')
+        .eq('role_id', profile.role_id)
+
+      // If we got a list, use it; if not, fail open.
+      if (rs && rs.length > 0) {
+        setAllowedScreens(rs.map((x) => x.screen_key))
+      } else {
+        setAllowedScreens(null)
+      }
+    } catch (e) {
+      // Any error → fail open, so a glitch never locks anyone out.
+      setAllowedScreens(null)
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -142,20 +208,31 @@ export default function App() {
         {navOpen && <div className="nav-backdrop" onClick={() => setNavOpen(false)} />}
 
         <nav className={navOpen ? 'app-nav open' : 'app-nav'}>
-          {NAV_GROUPS.map((group) => (
-            <div key={group.heading} className="nav-group">
-              <div className="nav-heading">{group.heading}</div>
-              {group.items.map((item) => (
-                <button
-                  key={item.key}
-                  className={item.key === view ? 'nav-item active' : 'nav-item'}
-                  onClick={() => pick(item.key)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          ))}
+          {NAV_GROUPS.map((group) => {
+            // Filter items to those this person may see.
+            const items = group.items.filter((item) => {
+              // The Roles screen is always available to super users, and never to others.
+              if (item.key === 'roles') return isSuper
+              // Super users (allowedScreens null) or fail-open → show all.
+              if (allowedScreens === null) return true
+              return allowedScreens.includes(item.key)
+            })
+            if (items.length === 0) return null   // hide empty groups
+            return (
+              <div key={group.heading} className="nav-group">
+                <div className="nav-heading">{group.heading}</div>
+                {items.map((item) => (
+                  <button
+                    key={item.key}
+                    className={item.key === view ? 'nav-item active' : 'nav-item'}
+                    onClick={() => pick(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )
+          })}
         </nav>
 
         <main className="app-main">

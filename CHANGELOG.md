@@ -2,6 +2,13 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.9.0] - 2026-07-02
+### Added
+- Roles and access control: four configurable roles (super user, warehouse, operations, buyer)
+- Roles admin screen (super user only) to tick which screens each role can see and to assign roles to logins
+- Sidebar now filters to show each person only the screens their role allows
+- Bespoke item procurement details: PO number, delivered or collect-locally, and supplier name and location, editable after adding
+
 ## [0.8.1] - 2026-07-02
 ### Added
 - Part-picked status: save progress on a pick when stock is short, then return to it once more stock arrives
