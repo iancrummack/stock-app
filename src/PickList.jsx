@@ -1,9 +1,11 @@
 // src/PickList.jsx
 import { useState, useEffect } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from './supabaseClient'
 
 const STATUS_LABEL = {
   open: 'Open',
+  part_picked: 'Part-picked (in progress)',
   completed: 'Completed',
   completed_with_errors: 'Completed with issues',
   cancelled: 'Cancelled',
@@ -21,13 +23,14 @@ export default function PickList() {
   const [lines, setLines] = useState([])
   const [linesLoading, setLinesLoading] = useState(false)
 
-  const [pickedQty, setPickedQty] = useState({})
+  const [pickedQty, setPickedQty] = useState({})     // line_id -> qty picked THIS pass (consumables)
   const [chosenAssets, setChosenAssets] = useState({})
   const [availableAssets, setAvailableAssets] = useState({})
   const [holderId, setHolderId] = useState('')
   const [note, setNote] = useState('')
-  const [committing, setCommitting] = useState(false)
+  const [working, setWorking] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
+  const [confirmComplete, setConfirmComplete] = useState(false)
 
   async function loadPicks() {
     setLoading(true); setError(null)
@@ -49,7 +52,8 @@ export default function PickList() {
   async function openOne(pick) {
     setOpenPick(pick)
     setLinesLoading(true)
-    setPickedQty({}); setChosenAssets({}); setAvailableAssets({}); setNote(''); setConfirmCancel(false)
+    setPickedQty({}); setChosenAssets({}); setAvailableAssets({}); setNote(pick.note || '')
+    setConfirmCancel(false); setConfirmComplete(false)
     setHolderId(pick.holder_id ? String(pick.holder_id) : '')
 
     const { data } = await supabase
@@ -64,12 +68,19 @@ export default function PickList() {
     })
     setLines(ordered)
 
-    const assetLines = ordered.filter((l) => l.products?.tracking_type === 'asset')
-    const avail = {}
+    // For each consumable line, default this pass's input to the OUTSTANDING amount.
     const initialQty = {}
     for (const l of ordered) {
-      if (l.products?.tracking_type !== 'asset') initialQty[l.id] = l.qty
+      if (l.products?.tracking_type !== 'asset') {
+        const outstanding = Number(l.qty) - Number(l.picked_qty || 0)
+        initialQty[l.id] = outstanding > 0 ? outstanding : 0
+      }
     }
+    setPickedQty(initialQty)
+
+    // For each asset line, load available in-store coded units of that type.
+    const assetLines = ordered.filter((l) => l.products?.tracking_type === 'asset')
+    const avail = {}
     for (const l of assetLines) {
       const { data: units } = await supabase
         .from('assets')
@@ -81,7 +92,6 @@ export default function PickList() {
       avail[l.id] = units || []
     }
     setAvailableAssets(avail)
-    setPickedQty(initialQty)
     setLinesLoading(false)
   }
 
@@ -91,47 +101,74 @@ export default function PickList() {
     const cur = chosenAssets[lineId] || {}
     setChosenAssets({ ...chosenAssets, [lineId]: { ...cur, [assetId]: !cur[assetId] } })
   }
-
   function chosenCount(lineId) {
     const c = chosenAssets[lineId] || {}
     return Object.values(c).filter(Boolean).length
   }
 
-  async function commit() {
-    setError(null)
-    const payload = lines.map((l) => {
+  // Build the payload: new TOTAL picked per line = already-picked + this pass.
+  function buildPayload() {
+    return lines.map((l) => {
       if (l.products?.tracking_type === 'asset') {
         const chosen = chosenAssets[l.id] || {}
         const ids = Object.keys(chosen).filter((k) => chosen[k]).map(Number)
-        return { line_id: l.id, product_id: l.product_id, picked_qty: ids.length, asset_ids: ids }
+        return { line_id: l.id, product_id: l.product_id, asset_ids: ids }
       }
-      return { line_id: l.id, product_id: l.product_id, picked_qty: Number(pickedQty[l.id] || 0), asset_ids: [] }
+      const already = Number(l.picked_qty || 0)
+      const thisPass = Number(pickedQty[l.id] || 0)
+      return { line_id: l.id, product_id: l.product_id, picked_qty: already + thisPass, asset_ids: [] }
     })
+  }
 
-    setCommitting(true)
-    // Save the chosen holder onto the pick so the commit assigns assets to them.
+  async function run(finalise) {
+    setError(null)
+    setWorking(true)
     if (holderId) {
       await supabase.from('picks').update({ holder_id: Number(holderId) }).eq('id', openPick.id)
     }
     const { error } = await supabase.rpc('commit_pick', {
       p_pick_id: openPick.id,
-      p_lines: payload,
+      p_lines: buildPayload(),
       p_note: note || null,
+      p_finalise: finalise,
     })
-    setCommitting(false)
+    setWorking(false)
     if (error) { setError(error.message); return }
     await loadPicks()
     setOpenPick(null); setLines([])
   }
 
   async function cancelPick() {
-    setError(null)
-    setCommitting(true)
+    setError(null); setWorking(true)
     const { error } = await supabase.from('picks').update({ status: 'cancelled' }).eq('id', openPick.id)
-    setCommitting(false)
+    setWorking(false)
     if (error) { setError(error.message); return }
     await loadPicks()
     setOpenPick(null); setLines([])
+  }
+
+  // Export the outstanding shortfall lines to Excel (for the buyer / suppliers).
+  function exportShortfalls() {
+    const shortfalls = lines
+      .map((l) => {
+        const outstanding = Number(l.qty) - Number(l.picked_qty || 0)
+        return { l, outstanding }
+      })
+      .filter((x) => x.outstanding > 0)
+      .map(({ l, outstanding }) => ({
+        Code: l.products?.code || '',
+        Product: l.products?.name || '',
+        Kind: l.products?.tracking_type === 'asset' ? 'asset' : 'consumable',
+        Wanted: l.qty,
+        Picked: l.picked_qty || 0,
+        Outstanding: outstanding,
+      }))
+    const job = openPick.projects ? `${openPick.projects.code}` : 'pick'
+    const worksheet = XLSX.utils.json_to_sheet(shortfalls)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Shortfalls')
+    const today = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(workbook, `shortfalls-${job}-${today}.xlsx`)
   }
 
   if (loading) return <p>Loading picks…</p>
@@ -139,7 +176,9 @@ export default function PickList() {
 
   // ---- Working one pick ----
   if (openPick) {
-    const isOpen = openPick.status === 'open'
+    const workable = openPick.status === 'open' || openPick.status === 'part_picked'
+    const anyOutstanding = lines.some((l) => Number(l.qty) - Number(l.picked_qty || 0) > 0)
+
     return (
       <div>
         <button className="btn-link" onClick={back}>← Back to picks</button>
@@ -156,26 +195,35 @@ export default function PickList() {
 
         {linesLoading ? <p>Loading lines…</p> : (
           <>
-            <table className="data-table" style={{ marginTop: '1rem' }}>
+            <div className="list-actions" style={{ marginTop: '1rem' }}>
+              <button onClick={exportShortfalls} disabled={!anyOutstanding}>Export shortfalls to Excel</button>
+            </div>
+
+            <table className="data-table">
               <thead>
-                <tr><th>Code</th><th>Product</th><th>Location</th><th className="num">Wanted</th><th>Pick</th></tr>
+                <tr><th>Code</th><th>Product</th><th>Location</th><th className="num">Wanted</th><th className="num">Already</th><th>{workable ? 'Pick now' : 'Picked'}</th></tr>
               </thead>
               <tbody>
                 {lines.map((l) => {
                   const isAsset = l.products?.tracking_type === 'asset'
+                  const already = Number(l.picked_qty || 0)
+                  const outstanding = Number(l.qty) - already
                   return (
-                    <tr key={l.id}>
+                    <tr key={l.id} className={outstanding > 0 ? 'row-soon' : ''}>
                       <td>{l.products?.code || '—'}</td>
                       <td>{l.products?.name || '—'}</td>
                       <td>{l.products?.locations ? `${l.products.locations.code} — ${l.products.locations.name}` : '—'}</td>
                       <td className="num">{l.qty}</td>
+                      <td className="num">{already}</td>
                       <td>
-                        {!isOpen ? (
-                          <span>{l.picked_qty} ({l.line_status})</span>
+                        {!workable ? (
+                          <span>{already} ({l.line_status})</span>
+                        ) : outstanding <= 0 ? (
+                          <span style={{ color: '#1b5e20' }}>fulfilled</span>
                         ) : isAsset ? (
                           <div>
                             <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '0.3rem' }}>
-                              Tick {l.qty} unit{l.qty === 1 ? '' : 's'} ({chosenCount(l.id)} chosen):
+                              Need {outstanding} more ({chosenCount(l.id)} ticked):
                             </div>
                             {(availableAssets[l.id] || []).length === 0 ? (
                               <span className="line-flag">None available in store</span>
@@ -192,7 +240,7 @@ export default function PickList() {
                           </div>
                         ) : (
                           <input
-                            type="number" min="0" className="qty-inline"
+                            type="number" min="0" max={outstanding} className="qty-inline"
                             value={pickedQty[l.id] ?? ''}
                             onChange={(e) => setPickedQty({ ...pickedQty, [l.id]: e.target.value })}
                           />
@@ -204,7 +252,7 @@ export default function PickList() {
               </tbody>
             </table>
 
-            {isOpen && (
+            {workable && (
               <div style={{ marginTop: '1rem', maxWidth: 640 }}>
                 <div className="form-field">
                   <label>Holder (site manager) — assigned to all assets on this job</label>
@@ -222,19 +270,33 @@ export default function PickList() {
                   <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="optional" />
                 </div>
 
-                <div className="pick-commit-actions" style={{ marginTop: '0.75rem' }}>
-                  <button onClick={commit} disabled={committing}>{committing ? 'Committing…' : 'Commit pick'}</button>
-                  {!confirmCancel && (
-                    <button className="btn-secondary" onClick={() => setConfirmCancel(true)} disabled={committing}>Cancel job</button>
-                  )}
-                </div>
+                {!confirmComplete ? (
+                  <div className="pick-commit-actions" style={{ marginTop: '0.75rem' }}>
+                    <button className="btn-secondary" onClick={() => run(false)} disabled={working}>
+                      {working ? 'Saving…' : 'Save progress'}
+                    </button>
+                    <button onClick={() => setConfirmComplete(true)} disabled={working}>Complete &amp; dispatch</button>
+                    {!confirmCancel && (
+                      <button className="btn-secondary" onClick={() => setConfirmCancel(true)} disabled={working}>Cancel job</button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="form-warning" style={{ marginTop: '0.75rem' }}>
+                    Completing dispatches this job and it can't be amended afterwards.
+                    {anyOutstanding ? ' Some lines are still short — they will go as shortfalls.' : ' Everything is picked.'}
+                    <div className="pick-commit-actions" style={{ marginTop: '0.5rem' }}>
+                      <button onClick={() => run(true)} disabled={working}>{working ? 'Dispatching…' : 'Yes, complete & dispatch'}</button>
+                      <button className="btn-secondary" onClick={() => setConfirmComplete(false)} disabled={working}>Back</button>
+                    </div>
+                  </div>
+                )}
 
-                {confirmCancel && (
+                {confirmCancel && !confirmComplete && (
                   <div className="form-warning" style={{ marginTop: '0.75rem' }}>
                     You're cancelling this pick. Its items will return to available stock. Are you sure?
                     <div className="pick-commit-actions" style={{ marginTop: '0.5rem' }}>
-                      <button onClick={cancelPick} disabled={committing} style={{ background: '#b71c1c' }}>Yes, cancel job</button>
-                      <button className="btn-secondary" onClick={() => setConfirmCancel(false)} disabled={committing}>No, keep it</button>
+                      <button onClick={cancelPick} disabled={working} style={{ background: '#b71c1c' }}>Yes, cancel job</button>
+                      <button className="btn-secondary" onClick={() => setConfirmCancel(false)} disabled={working}>No, keep it</button>
                     </div>
                   </div>
                 )}
@@ -247,7 +309,8 @@ export default function PickList() {
   }
 
   // ---- List of picks ----
-  const visible = showAll ? picks : picks.filter((p) => p.status === 'open')
+  const activeStatuses = ['open', 'part_picked']
+  const visible = showAll ? picks : picks.filter((p) => activeStatuses.includes(p.status))
 
   return (
     <div>
@@ -263,14 +326,17 @@ export default function PickList() {
             <tr><th>Job</th><th>Collection</th><th>Status</th><th></th></tr>
           </thead>
           <tbody>
-            {visible.map((p) => (
-              <tr key={p.id} className={p.status === 'open' ? 'clickable-row' : ''}>
-                <td>{p.projects ? `${p.projects.code} — ${p.projects.name}` : '—'}</td>
-                <td>{p.collection_date || '—'}</td>
-                <td>{STATUS_LABEL[p.status] || p.status}</td>
-                <td><button className="btn-link" onClick={() => openOne(p)}>{p.status === 'open' ? 'Pick this' : 'View'}</button></td>
-              </tr>
-            ))}
+            {visible.map((p) => {
+              const workable = p.status === 'open' || p.status === 'part_picked'
+              return (
+                <tr key={p.id} className={workable ? 'clickable-row' : ''}>
+                  <td>{p.projects ? `${p.projects.code} — ${p.projects.name}` : '—'}</td>
+                  <td>{p.collection_date || '—'}</td>
+                  <td>{STATUS_LABEL[p.status] || p.status}</td>
+                  <td><button className="btn-link" onClick={() => openOne(p)}>{workable ? 'Open Pick' : 'View'}</button></td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       )}

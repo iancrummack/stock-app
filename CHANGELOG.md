@@ -2,6 +2,17 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.8.1] - 2026-07-02
+### Added
+- Part-picked status: save progress on a pick when stock is short, then return to it once more stock arrives
+- Picks can now be worked in multiple passes, each pass issues only what was picked that pass, and reopening shows the outstanding amounts
+- "Complete & dispatch" finalises a pick (final, not amendable), separate from "Save progress"
+- Export a pick's shortfall items to Excel, to send to the buyer or suppliers
+- Availability now counts part-picked picks' outstanding amounts as committed, so they aren't double-allocated
+
+### Changed
+- Pick list button reads "Open pick" rather than "Pick this"
+
 ## [0.8.0] - 2026-07-01
 ### Added
 - Upload pick list: create a trackable pick from the buyer's master list Excel file, reading the Site Set Up & Signage tab
