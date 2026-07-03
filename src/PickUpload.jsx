@@ -5,12 +5,16 @@ import { supabase } from './supabaseClient'
 
 const SHEET_NAME = 'Site Set Up & Signage'
 
+// Site Manager Box rule: if the box is "Need", the sector picks which box product.
+const SM_BOX_BY_SECTOR = { BD: 127, MF: 128, TA: 129 }
+
 export default function PickUpload() {
   const [parsing, setParsing] = useState(false)
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [creating, setCreating] = useState(false)
   const [done, setDone] = useState(null)
+  const [showFlagged, setShowFlagged] = useState(false)
 
   function findByLabel(rows, label) {
     for (let r = 0; r < rows.length; r++) {
@@ -25,7 +29,7 @@ export default function PickUpload() {
   async function handleFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
-    setError(null); setResult(null); setDone(null); setParsing(true)
+    setError(null); setResult(null); setDone(null); setParsing(true); setShowFlagged(false)
 
     try {
       const buf = await file.arrayBuffer()
@@ -39,6 +43,8 @@ export default function PickUpload() {
       const projectName = findByLabel(rows, 'Project Name')
       const jobNumber = findByLabel(rows, 'Project Job Number')
       const collectionRaw = findByLabel(rows, 'Collection Date')
+      const sectorRaw = findByLabel(rows, 'Sector')
+      const smBoxRaw = findByLabel(rows, 'Site Manager Box')
 
       let headerRow = -1
       for (let r = 0; r < rows.length; r++) {
@@ -136,6 +142,36 @@ export default function PickUpload() {
         }
       }
 
+    // ---- Site Manager Box rule ----
+      // If the header's Site Manager Box field says "Need", add the sector's box.
+      const smBox = String(smBoxRaw || '').trim().toLowerCase()
+      if (smBox === 'need') {
+        const sector = String(sectorRaw || '').trim().toUpperCase()
+        const boxProductId = SM_BOX_BY_SECTOR[sector]
+        if (!boxProductId) {
+          // "Need" but no recognisable sector — flag it loudly, don't guess.
+          flagged.push({
+            rowNum: '(header)', id: sector || '(blank)', qty: '1', desc: 'Site Manager Box',
+            reason: `Box needed but sector "${sectorRaw || 'blank'}" not recognised (expected TA, BD or MF)`,
+          })
+        } else {
+          // Look up the box product so we can show it in the summary.
+          const { data: boxProd } = await supabase
+            .from('products')
+            .select('id, code, name, tracking_type')
+            .eq('id', boxProductId)
+            .single()
+          if (boxProd) {
+            mergeLine(boxProd, 1, 'SM box')
+          } else {
+            flagged.push({
+              rowNum: '(header)', id: String(boxProductId), qty: '1', desc: 'Site Manager Box',
+              reason: `Box product id ${boxProductId} not found`,
+            })
+          }
+        }
+      }
+
       let collectionDate = null
       if (collectionRaw != null && collectionRaw !== '') {
         let d = null
@@ -216,21 +252,49 @@ export default function PickUpload() {
             </div>
           </div>
 
-          {result.flagged.length > 0 && (
-            <div style={{ marginTop: '1rem' }}>
-              <h4 className="detail-subhead">Flagged rows (won't be included)</h4>
-              <table className="data-table">
-                <thead><tr><th>Sheet row</th><th>I.D</th><th>Qty</th><th>Description</th><th>Problem</th></tr></thead>
-                <tbody>
-                  {result.flagged.map((f, i) => (
-                    <tr key={i} className="row-critical">
-                      <td>{f.rowNum}</td><td>{f.id || '—'}</td><td>{f.qty || '—'}</td><td>{f.desc}</td><td>{f.reason}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+          {result.flagged.length > 0 && (() => {
+            // Group the flagged rows by reason for the collapsed summary.
+            const byReason = result.flagged.reduce((acc, f) => {
+              acc[f.reason] = (acc[f.reason] || 0) + 1
+              return acc
+            }, {})
+            return (
+              <div style={{ marginTop: '1rem' }}>
+                <div
+                  onClick={() => setShowFlagged((s) => !s)}
+                  style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                >
+                  <h4 className="detail-subhead" style={{ margin: 0, color: '#b71c1c' }}>
+                    {showFlagged ? '▾' : '▸'} {result.flagged.length} flagged {result.flagged.length === 1 ? 'row' : 'rows'} (won't be included)
+                  </h4>
+                </div>
+
+                {/* Collapsed: a per-reason breakdown so you can judge without expanding */}
+                {!showFlagged && (
+                  <div style={{ fontSize: '0.85rem', color: '#8a6d00', marginTop: '0.3rem' }}>
+                    {Object.entries(byReason).map(([reason, count], i) => (
+                      <div key={i}>{count} × {reason}</div>
+                    ))}
+                    <button className="btn-link" onClick={() => setShowFlagged(true)} style={{ paddingLeft: 0 }}>Show details</button>
+                  </div>
+                )}
+
+                {/* Expanded: the full table as before */}
+                {showFlagged && (
+                  <table className="data-table" style={{ marginTop: '0.5rem' }}>
+                    <thead><tr><th>Sheet row</th><th>I.D</th><th>Qty</th><th>Description</th><th>Problem</th></tr></thead>
+                    <tbody>
+                      {result.flagged.map((f, i) => (
+                        <tr key={i} className="row-critical">
+                          <td>{f.rowNum}</td><td>{f.id || '—'}</td><td>{f.qty || '—'}</td><td>{f.desc}</td><td>{f.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            )
+          })()}
 
           <div style={{ marginTop: '1rem' }}>
             <h4 className="detail-subhead">Lines to be created ({result.matched.length})</h4>

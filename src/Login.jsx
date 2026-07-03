@@ -20,7 +20,7 @@ export default function Login() {
   return (
     <div className="login-wrapper">
       <form className="login-card" onSubmit={handleLogin}>
-        <h1>Stock App</h1>
+        <h1>7Formation - Stock App</h1>
         <p>Sign in to continue</p>
         <label>
           Email

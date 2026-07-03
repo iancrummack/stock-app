@@ -2,6 +2,14 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.9.1] - 2026-07-02
+### Added
+- Site Manager Box rule on upload: if the master list header's Site Manager Box field reads "Need", the sector (TA, BD, MF) automatically adds the matching box as an asset line, flagged if the sector is missing or unrecognised
+
+### Changed
+- Flagged rows on the upload summary now start collapsed, showing a count and a breakdown by reason, with a click to expand the full table, so a small pick isn't buried under validation rows
+- Flagged summary heading now shown in red to match the flagged styling
+
 ## [0.9.0] - 2026-07-02
 ### Added
 - Roles and access control: four configurable roles (super user, warehouse, operations, buyer)
