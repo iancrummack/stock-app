@@ -2,6 +2,11 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.10.1] - 2026-07-04
+### Fixed
+- Revoked unauthenticated (public) execute access on all security-definer database functions, so only logged-in users can call them
+- Removed an unused early-experiment view (stock_on_hand_by_location) that was flagged as a critical security concern
+
 ## [0.10.0] - 2026-07-03
 ### Added
 - Transactions view: consumable stock movements with product, type, and date-range filters, searchable by product name or code, with Excel export and the person's full name against each movement
