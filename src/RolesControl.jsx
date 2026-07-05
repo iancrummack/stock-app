@@ -9,6 +9,8 @@ const SCREEN_CATALOGUE = [
     { key: 'stock', label: 'Stock on hand' },
     { key: 'stocklevels', label: 'Stock levels' },
     { key: 'bayview', label: 'Bay contents' },
+    { key: 'transactions', label: 'Transactions' },
+    { key: 'stocktake', label: 'Stock take' },
   ]},
   { group: 'Assets', screens: [
     { key: 'assets', label: 'Asset register' },

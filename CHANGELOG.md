@@ -2,6 +2,13 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.10.0] - 2026-07-03
+### Added
+- Transactions view: consumable stock movements with product, type, and date-range filters, searchable by product name or code, with Excel export and the person's full name against each movement
+- Stock take: count by owner, bay, or category, informed counting with expected figures shown, review discrepancies before confirming, adjustments written as ledger movements visible in Transactions
+- Forgot password: reset link on the login screen, branded in-app password-change page
+- Full names on user profiles, shown on transactions and available app-wide
+
 ## [0.9.1] - 2026-07-02
 ### Added
 - Site Manager Box rule on upload: if the master list header's Site Manager Box field reads "Need", the sector (TA, BD, MF) automatically adds the matching box as an asset line, flagged if the sector is missing or unrecognised

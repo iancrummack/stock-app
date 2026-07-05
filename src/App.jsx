@@ -22,6 +22,9 @@ import PickList from './PickList'
 import PickUpload from './PickUpload'
 import KitsControl from './KitsControl'
 import RolesControl from './RolesControl'
+import Transactions from './Transactions'
+import StockTake from './StockTake'
+import ResetPassword from './ResetPassword'
 import './App.css'
 
 // Screens, unchanged — just the component for each key.
@@ -45,15 +48,18 @@ const SCREENS = {
   pickupload: PickUpload,
   kits: KitsControl,
   roles: RolesControl,
+  transactions: Transactions,
+  stocktake: StockTake,
 }
 
 // The same screens, now organised into named groups for the sidebar.
 const NAV_GROUPS = [
   { heading: 'Stock', items: [
-    { key: 'bayview',     label: 'Bay contents' },
     { key: 'stock',       label: 'Stock on hand' },
     { key: 'stocklevels', label: 'Stock levels' },
-
+    { key: 'bayview',     label: 'Bay contents' },
+    { key: 'transactions', label: 'Transactions' },
+    { key: 'stocktake',    label: 'Stock take' },
   ]},
   { heading: 'Assets', items: [
     { key: 'assets',      label: 'Asset register' },
@@ -96,6 +102,7 @@ export default function App() {
   const [showChangelog, setShowChangelog] = useState(false)
   const [allowedScreens, setAllowedScreens] = useState(null)   // null = not yet loaded / fail-open
   const [isSuper, setIsSuper] = useState(false)
+  const [resetMode, setResetMode] = useState(false)
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -111,6 +118,9 @@ export default function App() {
     })
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
+        if (_event === 'PASSWORD_RECOVERY') {
+          setResetMode(true)
+        }
         if (session?.user) {
           await supabase.from('profiles').upsert(
             { id: session.user.id, email: session.user.email },
@@ -118,7 +128,6 @@ export default function App() {
           )
           await loadAccess(session.user.id)
         } else {
-          // Signed out — reset access state.
           setAllowedScreens(null)
           setIsSuper(false)
         }
@@ -138,6 +147,7 @@ export default function App() {
   }
 
   if (loading) return <div className="app-loading">Loading…</div>
+  if (resetMode) return <ResetPassword onDone={() => setResetMode(false)} />
   if (!session) return <Login />
 
   const ActiveScreen = SCREENS[view]
