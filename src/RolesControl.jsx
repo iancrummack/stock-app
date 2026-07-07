@@ -29,6 +29,7 @@ const SCREEN_CATALOGUE = [
     { key: 'products', label: 'Products' },
     { key: 'projects', label: 'Projects' },
     { key: 'people', label: 'People' },
+    { key: 'locations', label: 'Locations' },
     { key: 'servicetypes', label: 'Service types' },
     { key: 'assettypeservices', label: 'Asset service rules' },
     { key: 'kits', label: 'Kits' },

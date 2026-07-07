@@ -25,6 +25,7 @@ import RolesControl from './RolesControl'
 import Transactions from './Transactions'
 import StockTake from './StockTake'
 import ResetPassword from './ResetPassword'
+import LocationsControl from './LocationsControl'
 import './App.css'
 
 // Screens, unchanged — just the component for each key.
@@ -50,6 +51,7 @@ const SCREENS = {
   roles: RolesControl,
   transactions: Transactions,
   stocktake: StockTake,
+  locations: LocationsControl,
 }
 
 // The same screens, now organised into named groups for the sidebar.
@@ -78,6 +80,7 @@ const NAV_GROUPS = [
     { key: 'products',          label: 'Products' },
     { key: 'projects',          label: 'Projects' },
     { key: 'people',            label: 'People' },
+    { key: 'locations',         label: 'Locations' },
     { key: 'servicetypes',      label: 'Service types' },
     { key: 'assettypeservices', label: 'Asset service rules' },
     { key: 'kits',              label: 'Kits' },

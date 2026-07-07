@@ -2,6 +2,10 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.10.2] - 2026-07-06
+### Added
+- Locations admin screen: add, edit, and manage warehouse bays with a route position field controlling the pick-walk order independently of the database id
+
 ## [0.10.1] - 2026-07-04
 ### Fixed
 - Revoked unauthenticated (public) execute access on all security-definer database functions, so only logged-in users can call them
