@@ -7,6 +7,7 @@ export default function StockLevels() {
   const [rows, setRows] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -23,9 +24,17 @@ export default function StockLevels() {
     load()
   }, [])
 
+const visible = search.trim()
+    ? rows.filter((r) => {
+        const q = search.trim().toLowerCase()
+        const hay = `${r.name || ''} ${r.owner || ''} ${r.category || ''}`.toLowerCase()
+        return hay.includes(q)
+      })
+    : rows
+
   function exportToExcel() {
     // Friendly column names, now including owner and category so buyers can filter.
-    const exportRows = rows.map((r) => ({
+    const exportRows = visible.map((r) => ({
       Code: r.code,
       Product: r.name,
       Owner: r.owner || '',
@@ -44,14 +53,29 @@ export default function StockLevels() {
 
   return (
     <div>
+      <div className="filter-bar">
+        <input
+          type="text"
+          className="filter-search"
+          placeholder="Search name, owner or category"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
+
       <div className="list-actions">
-        <button onClick={exportToExcel} disabled={rows.length === 0}>
+        <button onClick={exportToExcel} disabled={visible.length === 0}>
           Export to Excel
         </button>
       </div>
 
-      {rows.length === 0 ? (
-        <p>No products yet.</p>
+      <div className="filter-summary">
+        <span>{visible.length} of {rows.length}</span>
+        {search && <button className="btn-link" onClick={() => setSearch('')}>Clear search</button>}
+      </div>
+
+      {visible.length === 0 ? (
+        <p>{search ? 'No products match that search.' : 'No products yet.'}</p>
       ) : (
         <table className="data-table">
           <thead>
@@ -64,7 +88,7 @@ export default function StockLevels() {
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {visible.map((r) => (
               <tr key={r.product_id} className={r.on_hand < 0 ? 'row-critical' : r.on_hand === 0 ? 'row-warehouse-due' : ''}>
                 <td>{r.code}</td>
                 <td>{r.name}</td>

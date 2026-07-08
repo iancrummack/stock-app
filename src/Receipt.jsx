@@ -119,7 +119,7 @@ export default function Receipt({ receiptForm, setReceiptForm, resetReceipt }) {
           <label>Product</label>
           <select value={lineProduct} onChange={(e) => setLineProduct(e.target.value)}>
             <option value="">— choose a product —</option>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           {lineProduct && (
             homeBay(Number(lineProduct))

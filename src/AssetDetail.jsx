@@ -231,7 +231,7 @@ export default function AssetDetail({ assetId, onClose, onChanged }) {
                   ) : (
                     <select value={form.project_id} onChange={(e) => setForm({ ...form, project_id: e.target.value })}>
                       <option value="">— choose a site —</option>
-                      {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+                      {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                     </select>
                   )}
                   <label className="detail-label">Holder</label>

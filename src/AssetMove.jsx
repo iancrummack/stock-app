@@ -218,7 +218,7 @@ export default function AssetMove() {
               <label>Site (going to)</label>
               <select value={projectId} onChange={(e) => setProjectId(e.target.value)}>
                 <option value="">— choose a site —</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
               <div className="form-field">
@@ -288,7 +288,7 @@ export default function AssetMove() {
               <label>Filter by site (optional)</label>
               <select value={returnSite} onChange={(e) => { setReturnSite(e.target.value); setTicked({}); setConditions({}); setOriginalConditions({}); setReport(null); setComments({}) }}>
                 <option value="">— all assets on site —</option>
-                {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+                {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
             <div className="form-confirm">Ticked assets return to their type's home bay. Confirm or change each asset's condition before committing.</div>

@@ -121,7 +121,7 @@ export default function IssueReturn({ pickForm, setPickForm, resetPick }) {
           <label>{mode === 'issue' ? 'Project (going to)' : 'Project (coming back from)'}</label>
           <select value={pickForm.project_id} onChange={(e) => setProject(e.target.value)}>
             <option value="">— choose a project —</option>
-            {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         </div>
       </div>
@@ -131,7 +131,7 @@ export default function IssueReturn({ pickForm, setPickForm, resetPick }) {
           <label>Product</label>
           <select value={lineProduct} onChange={(e) => setLineProduct(e.target.value)}>
             <option value="">— choose a product —</option>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
           {lineProduct && <span className="stock-hint">In stock: {balances[Number(lineProduct)] ?? 0}</span>}
         </div>

@@ -2,6 +2,13 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.10.4] - 2026-07-06
+### Added
+- Search on the Stock levels screen, matching across name, owner and category, with export respecting the filter
+
+### Changed
+- Product dropdowns across the app now show names only (no codes) and sort alphabetically, making them easier to scan
+
 ## [0.10.3] - 2026-07-06
 ### Added
 - Condition check on asset return: confirm or change each asset's condition before committing, with a per-asset comment (max 25 chars) when condition changes

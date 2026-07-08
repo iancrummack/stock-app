@@ -126,7 +126,7 @@ export default function KitsControl() {
             <label>Add asset type</label>
             <select value={addProduct} onChange={(e) => setAddProduct(e.target.value)}>
               <option value="">— choose —</option>
-              {assetTypes.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
+              {assetTypes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
           <div className="form-field qty">

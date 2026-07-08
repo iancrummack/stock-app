@@ -50,7 +50,7 @@ export default function ProductsControl() {
         supabase.from('units').select('id, name').order('name'),
         supabase.from('owners').select('id, name:owner').order('owner'),
         supabase.from('categories').select('id, name').order('name'),
-        supabase.from('locations').select('id, code, name').order('code'),
+        supabase.from('locations').select('id, code, name').order('name'),
       ])
       if (prods.error) setError(prods.error.message)
       else setProducts(prods.data || [])
