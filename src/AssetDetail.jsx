@@ -71,7 +71,7 @@ export default function AssetDetail({ assetId, onClose, onChanged }) {
       location_id: asset.location_id || '', project_id: asset.project_id || '',
       holder_id: asset.holder_id || '', where: asset.project_id ? 'site' : 'store',
       service_type_id: '', expiry_date: '', last_done: '', editing_id: null,
-      new_code: asset.asset_code || '',
+      new_code: asset.asset_code || '', comment: '',
     })
     setConfirmRecode(false)
     setMode(which); setError(null)
@@ -90,7 +90,10 @@ export default function AssetDetail({ assetId, onClose, onChanged }) {
     if (error) { setError(error.message); return }
     setMode('view'); await load(); if (onChanged) onChanged()
   }
-  function saveCondition() { save('condition_change', { p_location_id: asset.location_id, p_project_id: asset.project_id }) }
+  function saveCondition() {
+    const note = `${asset.condition} → ${form.condition}${form.comment.trim() ? ' — ' + form.comment.trim() : ''}`
+    save('condition_change', { p_location_id: asset.location_id, p_project_id: asset.project_id, p_note: note })
+  }
   function saveMove() {
     const toSite = form.where === 'site'
     save('moved', {
@@ -102,6 +105,7 @@ export default function AssetDetail({ assetId, onClose, onChanged }) {
   function saveLifecycle(newStatus) {
     save(newStatus === 'under_repair' ? 'repair' : 'written_off', {
       p_status: newStatus, p_location_id: asset.location_id, p_project_id: asset.project_id,
+      p_note: form.comment.trim() || null,
     })
   }
 
@@ -203,6 +207,8 @@ export default function AssetDetail({ assetId, onClose, onChanged }) {
                   <select value={form.condition} onChange={(e) => setForm({ ...form, condition: e.target.value })}>
                     {CONDITIONS.map((c) => <option key={c} value={c}>{c}</option>)}
                   </select>
+                  <label className="detail-label">Note (max 25 chars)</label>
+                  <input type="text" maxLength={25} value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} placeholder="e.g. dent on left side" />
                   <div className="detail-edit-actions">
                     <button onClick={saveCondition} disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
                     <button className="btn-secondary" onClick={() => setMode('view')} disabled={saving}>Cancel</button>
@@ -247,6 +253,8 @@ export default function AssetDetail({ assetId, onClose, onChanged }) {
 
               {mode === 'lifecycle' && (
                 <div className="detail-edit">
+                  <label className="detail-label">Note (max 25 chars)</label>
+                  <input type="text" maxLength={25} value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} placeholder="e.g. valve replaced" />
                   <p className="detail-empty">Mark this asset as:</p>
                   <div className="detail-edit-actions">
                     <button onClick={() => saveLifecycle('under_repair')} disabled={saving}>Send for repair</button>

@@ -1,24 +1,32 @@
 // src/AssetMove.jsx
 import { useState, useEffect } from 'react'
+import * as XLSX from 'xlsx'
 import { supabase } from './supabaseClient'
 
+const CONDITIONS = ['new', 'good', 'fair', 'poor', 'out_of_service']
+
 export default function AssetMove() {
-  const [mode, setMode] = useState('assign')   // 'assign' | 'return'
+  const [mode, setMode] = useState('assign')
   const [assets, setAssets] = useState([])
   const [projects, setProjects] = useState([])
   const [people, setPeople] = useState([])
 
-  // assign header
   const [projectId, setProjectId] = useState('')
   const [holderId, setHolderId] = useState('')
-  // assign staged lines
   const [lines, setLines] = useState([])
   const [lineAsset, setLineAsset] = useState('')
 
-  // return: optional site filter + ticked set
-  const [returnSite, setReturnSite] = useState('')        // '' = no site filter
-  const [ticked, setTicked] = useState({})                // asset id -> true
-  const [returnAddAsset, setReturnAddAsset] = useState('') // for unfiltered add
+  const [returnSite, setReturnSite] = useState('')
+  const [ticked, setTicked] = useState({})
+  const [returnAddAsset, setReturnAddAsset] = useState('')
+
+  // Condition tracking for return
+  const [conditions, setConditions] = useState({})        // asset id -> chosen condition
+  const [originalConditions, setOriginalConditions] = useState({}) // asset id -> condition before return
+  const [comments, setComments] = useState({})             // asset id -> comment (max 25 chars)
+
+  // Condition report after commit
+  const [report, setReport] = useState(null)              // [{code, type, project, oldCondition, newCondition, changed}]
 
   const [status, setStatus] = useState(null)
   const [error, setError] = useState(null)
@@ -27,7 +35,7 @@ export default function AssetMove() {
   async function loadAssets() {
     const { data } = await supabase
       .from('assets')
-      .select('id, asset_code, status, project_id, product_id, products(name), projects(code, name)')
+      .select('id, asset_code, status, condition, project_id, product_id, products(name), projects(code, name)')
       .not('asset_code', 'is', null)
       .in('status', ['in_store', 'on_site'])
       .order('asset_code')
@@ -51,6 +59,7 @@ export default function AssetMove() {
     setMode(next)
     setLines([]); setProjectId(''); setHolderId(''); setLineAsset('')
     setReturnSite(''); setTicked({}); setReturnAddAsset('')
+    setConditions({}); setOriginalConditions({}); setReport(null); setComments({})
     setError(null); setResult(null)
   }
 
@@ -69,7 +78,6 @@ export default function AssetMove() {
   function removeAssignLine(key) { setResult(null); setLines(lines.filter((l) => l.key !== key)) }
 
   // ---------- RETURN ----------
-  // On-site assets, optionally filtered to the chosen site.
   const onSite = assets.filter((a) => a.status === 'on_site')
   const returnList = returnSite
     ? onSite.filter((a) => String(a.project_id) === String(returnSite))
@@ -77,13 +85,27 @@ export default function AssetMove() {
   const tickedIds = Object.keys(ticked).filter((id) => ticked[id]).map(Number)
 
   function toggleTick(id) {
-    setResult(null)
-    setTicked({ ...ticked, [id]: !ticked[id] })
+    setResult(null); setReport(null)
+    const nowTicked = !ticked[id]
+    setTicked({ ...ticked, [id]: nowTicked })
+    if (nowTicked) {
+      // When ticking, set default condition to the asset's current condition.
+      const asset = assets.find((a) => a.id === id)
+      if (asset) {
+        setConditions((prev) => ({ ...prev, [id]: asset.condition || 'good' }))
+        setOriginalConditions((prev) => ({ ...prev, [id]: asset.condition || 'good' }))
+      }
+    }
+  }
+
+  function setCondition(assetId, value) {
+    setConditions({ ...conditions, [assetId]: value })
   }
 
   function clearAll() {
     setLines([]); setProjectId(''); setHolderId(''); setLineAsset('')
     setReturnSite(''); setTicked({}); setReturnAddAsset('')
+    setConditions({}); setOriginalConditions({}); setReport(null); setComments({})
     setError(null); setResult(null)
   }
 
@@ -105,19 +127,75 @@ export default function AssetMove() {
   }
 
   async function commitReturn() {
-    setError(null); setResult(null)
+    setError(null); setResult(null); setReport(null)
     if (tickedIds.length === 0) { setError('Tick at least one asset to return.'); return }
     setStatus('saving')
-    const { error } = await supabase.rpc('record_asset_move', {
+
+    // Build the report data BEFORE the move, while we still know which project each came from.
+    const reportData = tickedIds.map((id) => {
+      const a = assets.find((x) => x.id === id)
+      const oldCond = originalConditions[id] || a?.condition || '—'
+      const newCond = conditions[id] || oldCond
+      const comment = (comments[id] || '').trim()
+      return {
+        code: a?.asset_code || '—',
+        type: a?.products?.name || '—',
+        project: a?.projects ? `${a.projects.code} — ${a.projects.name}` : '—',
+        oldCondition: oldCond,
+        newCondition: newCond,
+        changed: oldCond !== newCond,
+        comment,
+      }
+    })
+
+    // 1. Do the return move (returns to home bays).
+    const { error: moveErr } = await supabase.rpc('record_asset_move', {
       p_move_type: 'return',
       p_project_id: null,
       p_location_id: null,
       p_holder_id: null,
       p_asset_ids: tickedIds,
     })
+    if (moveErr) { setStatus(null); setError(moveErr.message); return }
+
+    // 2. For any assets whose condition changed, update the condition and log it.
+    const changed = reportData.filter((r) => r.changed)
+    for (const r of changed) {
+      const a = assets.find((x) => x.asset_code === r.code)
+      if (!a) continue
+      await supabase.from('assets').update({ condition: r.newCondition }).eq('id', a.id)
+      await supabase.from('asset_events').insert({
+        asset_id: a.id,
+        event_type: 'condition_change',
+        condition: r.newCondition,
+        status: 'in_store',
+        note: `Condition changed on return: ${r.oldCondition} → ${r.newCondition}${r.comment ? ' — ' + r.comment : ''}`,
+      })
+    }
+
     setStatus(null)
-    if (error) setError(error.message)
-    else { setResult(`Returned ${tickedIds.length} asset${tickedIds.length === 1 ? '' : 's'} to their home bays.`); clearAll(); await loadAssets() }
+    setResult(`Returned ${tickedIds.length} asset${tickedIds.length === 1 ? '' : 's'} to their home bays.${changed.length > 0 ? ` ${changed.length} condition${changed.length === 1 ? '' : 's'} updated.` : ''}`)
+    setReport(reportData)
+    setTicked({}); setConditions({}); setOriginalConditions({}); setComments({})
+    await loadAssets()
+  }
+
+  function exportReport() {
+    if (!report) return
+    const rows = report.map((r) => ({
+      Code: r.code,
+      Type: r.type,
+      'Returned from': r.project,
+      'Condition before': r.oldCondition,
+      'Condition after': r.newCondition,
+      Changed: r.changed ? 'Yes' : '',
+      Note: r.comment || '',
+    }))
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Condition Report')
+    const today = new Date().toISOString().slice(0, 10)
+    XLSX.writeFile(workbook, `condition-report-${today}.xlsx`)
   }
 
   return (
@@ -208,32 +286,86 @@ export default function AssetMove() {
           <div className="pick-header">
             <div className="form-field">
               <label>Filter by site (optional)</label>
-              <select value={returnSite} onChange={(e) => { setReturnSite(e.target.value); setTicked({}) }}>
+              <select value={returnSite} onChange={(e) => { setReturnSite(e.target.value); setTicked({}); setConditions({}); setOriginalConditions({}); setReport(null); setComments({}) }}>
                 <option value="">— all assets on site —</option>
                 {projects.map((p) => <option key={p.id} value={p.id}>{p.code} — {p.name}</option>)}
               </select>
             </div>
-            <div className="form-confirm">Ticked assets return to their type's home bay automatically.</div>
+            <div className="form-confirm">Ticked assets return to their type's home bay. Confirm or change each asset's condition before committing.</div>
           </div>
 
           {error && <div className="form-error">{error}</div>}
           {result && <div className="form-success">{result}</div>}
 
-          {returnList.length === 0 ? (
-            <p className="pick-empty">No assets currently out{returnSite ? ' for that site' : ''}.</p>
-          ) : (
-            <>
+          {/* Condition report (shown after commit) */}
+          {report && (
+            <div style={{ marginTop: '1rem' }}>
+              <h4 className="detail-subhead">Condition report</h4>
+              <div className="list-actions">
+                <button onClick={exportReport}>Export to Excel</button>
+              </div>
               <table className="data-table">
-                <thead><tr><th>Return</th><th>Code</th><th>Type</th><th>Currently at</th></tr></thead>
+                <thead>
+                  <tr><th>Code</th><th>Type</th><th>Returned from</th><th>Before</th><th>After</th><th>Note</th></tr>
+                </thead>
                 <tbody>
-                  {returnList.map((a) => (
-                    <tr key={a.id} className={ticked[a.id] ? 'row-soon' : ''}>
-                      <td><input type="checkbox" checked={!!ticked[a.id]} onChange={() => toggleTick(a.id)} /></td>
-                      <td>{a.asset_code}</td>
-                      <td>{a.products?.name || '—'}</td>
-                      <td>{a.projects ? `${a.projects.code} — ${a.projects.name}` : '—'}</td>
+                  {report.map((r, i) => (
+                    <tr key={i} className={r.changed ? 'row-critical' : ''}>
+                      <td>{r.code}</td>
+                      <td>{r.type}</td>
+                      <td>{r.project}</td>
+                      <td>{r.oldCondition}</td>
+                      <td style={r.changed ? { fontWeight: 600, color: '#b71c1c' } : {}}>{r.newCondition}</td>
+                      <td>{r.comment || ''}</td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+              <div style={{ marginTop: '0.75rem', textAlign: 'center' }}>
+                <button className="btn-link" onClick={() => setReport(null)}>Close report</button>
+              </div>
+            </div>
+          )}
+
+          {!report && returnList.length === 0 ? (
+            <p className="pick-empty">No assets currently out{returnSite ? ' for that site' : ''}.</p>
+          ) : !report && (
+            <>
+              <table className="data-table">
+                <thead><tr><th>Return</th><th>Code</th><th>Type</th><th>Currently at</th><th>Condition</th></tr></thead>
+                <tbody>
+                  {returnList.map((a) => {
+                    const isTicked = !!ticked[a.id]
+                    return (
+                      <tr key={a.id} className={isTicked ? 'row-soon' : ''}>
+                        <td><input type="checkbox" checked={isTicked} onChange={() => toggleTick(a.id)} /></td>
+                        <td>{a.asset_code}</td>
+                        <td>{a.products?.name || '—'}</td>
+                        <td>{a.projects ? `${a.projects.code} — ${a.projects.name}` : '—'}</td>
+                        <td>
+                          {isTicked ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                              <select value={conditions[a.id] || a.condition || 'good'} onChange={(e) => setCondition(a.id, e.target.value)}>
+                                {CONDITIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                              {conditions[a.id] && conditions[a.id] !== (originalConditions[a.id] || a.condition) && (
+                                <input
+                                  type="text"
+                                  maxLength={25}
+                                  placeholder="Note (max 25 chars)"
+                                  value={comments[a.id] || ''}
+                                  onChange={(e) => setComments({ ...comments, [a.id]: e.target.value })}
+                                  style={{ fontSize: '0.8rem', width: '100%' }}
+                                />
+                              )}
+                            </div>
+                          ) : (
+                            <span style={{ color: '#888' }}>{a.condition || '—'}</span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
               <div className="pick-summary">

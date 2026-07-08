@@ -2,6 +2,12 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.10.3] - 2026-07-06
+### Added
+- Condition check on asset return: confirm or change each asset's condition before committing, with a per-asset comment (max 25 chars) when condition changes
+- Condition report shown on screen after a return, highlighting any condition changes, with Excel export
+- Comment field on the asset detail panel's condition-change and repair/write-off actions, recorded in the asset's event history
+
 ## [0.10.2] - 2026-07-06
 ### Added
 - Locations admin screen: add, edit, and manage warehouse bays with a route position field controlling the pick-walk order independently of the database id
