@@ -6,7 +6,6 @@ import { supabase } from './supabaseClient'
 const SHEET_NAME = 'Site Set Up & Signage'
 
 // Site Manager Box rule: if the box is "Need", the sector picks which box product.
-const SM_BOX_BY_SECTOR = { BD: 127, MF: 128, TA: 129 }
 
 export default function PickUpload() {
   const [parsing, setParsing] = useState(false)
@@ -76,6 +75,9 @@ export default function PickUpload() {
       // Gather numeric product ids and lettered kit codes.
       const numericIds = rawLines.filter((l) => l.id !== '' && !isNaN(Number(l.id))).map((l) => Number(l.id))
       const kitCodes = rawLines.filter((l) => l.id !== '' && isNaN(Number(l.id))).map((l) => l.id.toUpperCase())
+      // Also include the sector code so the SM box kit is loaded from the header.
+      const sector = String(sectorRaw || '').trim().toUpperCase()
+      if (sector && !kitCodes.includes(sector)) kitCodes.push(sector)
 
       // Load matching products, kits, and kit items.
       const productsById = {}
@@ -143,31 +145,27 @@ export default function PickUpload() {
       }
 
     // ---- Site Manager Box rule ----
-      // If the header's Site Manager Box field says "Need", add the sector's box.
       const smBox = String(smBoxRaw || '').trim().toLowerCase()
       if (smBox === 'need') {
         const sector = String(sectorRaw || '').trim().toUpperCase()
-        const boxProductId = SM_BOX_BY_SECTOR[sector]
-        if (!boxProductId) {
-          // "Need" but no recognisable sector — flag it loudly, don't guess.
+        const smKit = kitsByCode[sector]
+        if (!smKit) {
           flagged.push({
             rowNum: '(header)', id: sector || '(blank)', qty: '1', desc: 'Site Manager Box',
-            reason: `Box needed but sector "${sectorRaw || 'blank'}" not recognised (expected TA, BD or MF)`,
+            reason: `Box needed but no kit found for sector "${sectorRaw || 'blank'}"`,
           })
         } else {
-          // Look up the box product so we can show it in the summary.
-          const { data: boxProd } = await supabase
-            .from('products')
-            .select('id, code, name, tracking_type')
-            .eq('id', boxProductId)
-            .single()
-          if (boxProd) {
-            mergeLine(boxProd, 1, 'SM box')
-          } else {
+          const comps = kitItemsByKit[smKit.id] || []
+          if (comps.length === 0) {
             flagged.push({
-              rowNum: '(header)', id: String(boxProductId), qty: '1', desc: 'Site Manager Box',
-              reason: `Box product id ${boxProductId} not found`,
+              rowNum: '(header)', id: sector, qty: '1', desc: 'Site Manager Box',
+              reason: `Kit "${sector}" has no items defined`,
             })
+          } else {
+            for (const c of comps) {
+              const lineQty = c.multiply === false ? Number(c.qty) : Number(c.qty)
+              if (c.products) mergeLine(c.products, lineQty, `SM box (${sector})`)
+            }
           }
         }
       }

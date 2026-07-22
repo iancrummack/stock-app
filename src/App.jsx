@@ -26,6 +26,9 @@ import Transactions from './Transactions'
 import StockTake from './StockTake'
 import ResetPassword from './ResetPassword'
 import LocationsControl from './LocationsControl'
+import CreatePick from './CreatePick'
+import Dashboard from './Dashboard'
+import Insights from './Insights'
 import './App.css'
 
 // Screens, unchanged — just the component for each key.
@@ -52,10 +55,18 @@ const SCREENS = {
   transactions: Transactions,
   stocktake: StockTake,
   locations: LocationsControl,
+  pickcreate: CreatePick,
+  dashboard: Dashboard,
+  insights: Insights,
 }
 
 // The same screens, now organised into named groups for the sidebar.
 const NAV_GROUPS = [
+    { heading: 'Overview', items: [
+    { key: 'dashboard', label: 'Dashboard' },
+    { key: 'insights',  label: 'Insights' },
+  ]},
+
   { heading: 'Stock', items: [
     { key: 'stock',       label: 'Stock on hand' },
     { key: 'stocklevels', label: 'Stock levels' },
@@ -70,11 +81,12 @@ const NAV_GROUPS = [
     { key: 'compliance',  label: 'Compliance' },
   ]},
   { heading: 'Movements', items: [
+    { key: 'picklist',    label: 'Pick lists' },
     { key: 'receipt',     label: 'Receive stock' },
     { key: 'issue',       label: 'Issue / return' },
     { key: 'assetmove',   label: 'Asset move' },
-    { key: 'pickupload', label: 'Upload pick list' },
-    { key: 'picklist',  label: 'Pick lists' },
+    { key: 'pickcreate',  label: 'Create pick' },
+    { key: 'pickupload',  label: 'Upload pick list' },
   ]},
    { heading: 'Admin', items: [
     { key: 'products',          label: 'Products' },

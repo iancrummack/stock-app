@@ -12,6 +12,8 @@ const EMPTY = {
   category_id: '',
   default_location_id: '',
   description: '',
+  is_key_item: false,
+  min_level: '',
 }
 
 export default function ProductsControl() {
@@ -35,7 +37,7 @@ export default function ProductsControl() {
   async function loadProducts() {
     const { data, error } = await supabase
       .from('products')
-      .select('id, code, name, tracking_type, unit_id, owner_id, category_id, default_location_id, description')
+      .select('id, code, name, tracking_type, unit_id, owner_id, category_id, default_location_id, description, is_key_item, min_level')
       .order('name')
     if (error) setError(error.message)
     else setProducts(data || [])
@@ -46,7 +48,7 @@ export default function ProductsControl() {
       setLoading(true)
       setError(null)
       const [prods, u, o, c, l] = await Promise.all([
-        supabase.from('products').select('id, code, name, tracking_type, unit_id, owner_id, category_id, default_location_id, description').order('name'),
+        supabase.from('products').select('id, code, name, tracking_type, unit_id, owner_id, category_id, default_location_id, description, is_key_item, min_level').order('name'),
         supabase.from('units').select('id, name').order('name'),
         supabase.from('owners').select('id, name:owner').order('owner'),
         supabase.from('categories').select('id, name').order('name'),
@@ -76,6 +78,8 @@ export default function ProductsControl() {
       category_id: p.category_id ?? '',
       default_location_id: p.default_location_id ?? '',
       description: p.description || '',
+      is_key_item: !!p.is_key_item,
+      min_level: p.min_level ?? '',
     })
     setEditing(true)
     setError(null)
@@ -99,6 +103,8 @@ export default function ProductsControl() {
       category_id: form.category_id ? Number(form.category_id) : null,
       default_location_id: isAsset || !form.default_location_id ? null : Number(form.default_location_id),
       description: form.description.trim() || null,
+      is_key_item: !!form.is_key_item,
+      min_level: form.min_level === '' ? null : Number(form.min_level),
     }
 
     setStatus('saving')
@@ -202,6 +208,31 @@ export default function ProductsControl() {
               <option value="">— none —</option>
               {locations.map((l) => <option key={l.id} value={l.id}>{l.code} — {l.name}</option>)}
             </select>
+          </div>
+        )}
+
+        <div className="form-field">
+          <label>
+            <input
+              type="checkbox"
+              checked={form.is_key_item}
+              onChange={(e) => setField('is_key_item', e.target.checked)}
+            />{' '}
+            Key item (show on the dashboard watchlist)
+          </label>
+        </div>
+
+        {form.is_key_item && (
+          <div className="form-field">
+            <label>Minimum level</label>
+            <input
+              type="number" min="0" value={form.min_level}
+              onChange={(e) => setField('min_level', e.target.value)}
+              placeholder="the level below which this goes red"
+            />
+            <div className="form-warning" style={{ marginTop: '0.25rem' }}>
+              Without a minimum, the dashboard can only show the number, not whether it's a problem.
+            </div>
           </div>
         )}
 

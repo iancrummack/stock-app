@@ -11,6 +11,7 @@ export default function IssueReturn({ pickForm, setPickForm, resetPick }) {
   const [status, setStatus] = useState(null)   // null | 'saving'
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
+  const [productSearch, setProductSearch] = useState('')
 
   useEffect(() => {
     async function loadRef() {
@@ -49,7 +50,7 @@ export default function IssueReturn({ pickForm, setPickForm, resetPick }) {
     setError(null); setResult(null)
     if (!lineProduct) { setError('Choose a product to add.'); return }
     const q = Number(lineQty)
-    if (!q || q <= 0) { setError('Enter a quantity greater than zero.'); return }
+    if (q === '' || isNaN(q) || q < 0) { setError('Enter a valid quantity.'); return }
     const newLine = { key: crypto.randomUUID(), product_id: Number(lineProduct), quantity: q }
     setPickForm({ ...pickForm, lines: [...lines, newLine] })
     setLineProduct('')
@@ -127,20 +128,37 @@ export default function IssueReturn({ pickForm, setPickForm, resetPick }) {
       </div>
 
       <div className="add-line">
-        <div className="form-field grow">
-          <label>Product</label>
-          <select value={lineProduct} onChange={(e) => setLineProduct(e.target.value)}>
-            <option value="">— choose a product —</option>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          {lineProduct && <span className="stock-hint">In stock: {balances[Number(lineProduct)] ?? 0}</span>}
-        </div>
-        <div className="form-field qty">
-          <label>Qty</label>
-          <input type="number" min="1" value={lineQty} onChange={(e) => setLineQty(e.target.value)} />
-        </div>
-        <button className="add-btn" onClick={addLine}>Add line</button>
-      </div>
+  <div className="form-field grow">
+    <label>Product</label>
+    <input
+      type="text"
+      className="filter-search"
+      placeholder="Type to search products"
+      value={productSearch}
+      onChange={(e) => { setProductSearch(e.target.value); setLineProduct('') }}
+    />
+    {productSearch.trim() && (
+      <select value={lineProduct} onChange={(e) => setLineProduct(e.target.value)} style={{ marginTop: '0.3rem' }}>
+        <option value="">— pick from matches —</option>
+        {products.filter((p) => p.name.toLowerCase().includes(productSearch.trim().toLowerCase())).map((p) => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </select>
+    )}
+    {!productSearch.trim() && (
+      <select value={lineProduct} onChange={(e) => setLineProduct(e.target.value)} style={{ marginTop: '0.3rem' }}>
+        <option value="">— choose a product —</option>
+        {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+    )}
+    {lineProduct && <span className="stock-hint">In stock: {balances[Number(lineProduct)] ?? 0}</span>}
+  </div>
+  <div className="form-field qty">
+    <label>Qty</label>
+    <input type="number" min="0" value={lineQty} onChange={(e) => setLineQty(e.target.value)} />
+  </div>
+  <button className="add-btn" onClick={addLine}>Add line</button>
+</div>
 
       {error && <div className="form-error">{error}</div>}
       {result && <div className="form-success">{result}</div>}

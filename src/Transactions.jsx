@@ -14,6 +14,7 @@ export default function Transactions() {
   const [fFrom, setFFrom] = useState('')
   const [fTo, setFTo] = useState('')
   const [profileMap, setProfileMap] = useState({})
+  const [fWhere, setFWhere] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -67,14 +68,18 @@ export default function Transactions() {
       if (fFrom && r.created_at < fFrom) return false
       // fTo is inclusive of the whole day, so compare against the next day.
       if (fTo && r.created_at > fTo + 'T23:59:59') return false
+      if (fWhere.trim()) {
+        const q = fWhere.trim().toLowerCase()
+        if (!whereTo(r).toLowerCase().includes(q)) return false
+      }
       return true
     })
-  }, [rows, fProductSearch, fType, fFrom, fTo])
+  }, [rows, fProductSearch, fType, fFrom, fTo, fWhere])
 
   function clearFilters() {
-    setFProductSearch(''); setFType(''); setFFrom(''); setFTo('')
+    setFProductSearch(''); setFType(''); setFFrom(''); setFTo(''); setFWhere('')
   }
-  const anyFilter = fProductSearch || fType || fFrom || fTo
+  const anyFilter = fProductSearch || fType || fFrom || fTo || fWhere
 
   function exportToExcel() {
     const exportRows = visible.map((r) => ({
@@ -118,6 +123,14 @@ export default function Transactions() {
             To
             <input type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} />
           </label>
+          <input
+            type="text"
+            className="filter-search"
+            placeholder="Search where (site or store)"
+            value={fWhere}
+            onChange={(e) => setFWhere(e.target.value)}
+            style={{ maxWidth: 200 }}
+          />
         </div>
       </div>
 

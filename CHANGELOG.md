@@ -2,6 +2,43 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.12.0] - 2026-07-14
+
+### Added
+- **Dashboard** (Overview → Dashboard). A watchlist rather than a wall of charts. Key item stock levels shown as bars coloured against each item's own minimum, red below, amber close, green clear, covering both consumables and asset-tracked products in one view. Key item service status bucketed into overdue, under four weeks, under twelve weeks and clear, split by on site and in store, with a table of everything due inside four weeks. Cards for items below minimum, services due, services overdue and open picks.
+- **Insights** (Overview → Insights). Notice lag per pick, creation to collection date, with bars in red where a pick arrived with no notice or already late, and an average line across. Warehouse turnaround per pick, creation to completion. Stock movement volume by week for the last eight weeks, issued out against received in. Ad-hoc picks are excluded by default and can be toggled in, since they are short notice by nature and would otherwise drag the notice average down.
+- `is_key_item` and `min_level` on `products`, set with a tick box and a minimum field on the Products admin screen. Ticking a product puts it on the dashboard watchlist, so the watchlist is curated in the app and never needs a code change.
+- `completed_at` on `picks`, stamped by a `stamp_pick_completed` trigger whenever a pick moves to completed or completed with issues. A trigger rather than an edit to `commit_pick`, so every path to completion is captured, including any added later.
+- Recharts added as a dependency.
+
+### Notes
+- Turnaround starts measuring from this release. Picks completed before it have no completion timestamp and are correctly absent from the chart rather than reconstructed.
+- The compliance watchlist matches assets to key items by product name, since `compliance_due` exposes the type name rather than a product id. Renaming a key product will detach its existing compliance rows from the dashboard.
+
+## [0.11.0] - 2026-07-13
+
+### Added
+- **Create pick screen** (Movements → Create pick). Builds an ad-hoc pick by hand, for orders that arrive by phone, email or message rather than on the master list. Project and collection date, optional holder and note, then lines added three ways: from stock by product search, by kit code (expands into components, honouring the multiply flag exactly as an uploaded list does), and as bespoke buy-in items with PO number, supply method, supplier and location. Stock and bespoke lines sit side by side in one staging list, quantities editable and lines removable before creating. The result is an ordinary open pick that flows through the existing pick, commit, shortfall and cancel workflow.
+- `source` column on `picks`, defaulting to `upload`. Manual picks record `manual`, so ad-hoc orders can be separated from planned ones when the insights screen measures notice lag.
+- Visual tick boxes against each line on both the Create pick and Pick lists screens. A picker's crossing-off aid only, held in the browser and never saved.
+
+### Changed
+- Pick lists now shows collection dates as dd-mm-yyyy, on both the summary table and the open pick header.
+
+## [0.10.6] - 2026-07-10
+### Added
+- "Where" filter on the Transactions screen, search by project or location to find a job's movements
+- Zero-quantity picks allowed on Issue/return, recording that stock was needed but unavailable rather than silently missing
+
+### Changed
+- Site manager box rule now uses the kit system instead of hardcoded product IDs, managed through the Kits admin screen using sector codes (BD, MF, TA)
+
+## [0.10.5] - 2026-07-09
+### Added
+- Position column on the Stock levels screen showing each product's home bay
+- Owner dropdown filter on Stock levels, so held items per person are one click to view
+- Product search box on the Issue/return screen, type to narrow the product list instead of scrolling
+
 ## [0.10.4] - 2026-07-06
 ### Added
 - Search on the Stock levels screen, matching across name, owner and category, with export respecting the filter

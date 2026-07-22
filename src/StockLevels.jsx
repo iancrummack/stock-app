@@ -8,6 +8,7 @@ export default function StockLevels() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [search, setSearch] = useState('')
+  const [ownerFilter, setOwnerFilter] = useState('')
 
   useEffect(() => {
     async function load() {
@@ -24,13 +25,18 @@ export default function StockLevels() {
     load()
   }, [])
 
-const visible = search.trim()
-    ? rows.filter((r) => {
-        const q = search.trim().toLowerCase()
-        const hay = `${r.name || ''} ${r.owner || ''} ${r.category || ''}`.toLowerCase()
-        return hay.includes(q)
-      })
-    : rows
+const owners = [...new Set(rows.map((r) => r.owner).filter(Boolean))].sort()
+
+  const visible = rows.filter((r) => {
+    if (ownerFilter && r.owner !== ownerFilter) return false
+    if (search.trim()) {
+      const q = search.trim().toLowerCase()
+      const hay = `${r.name || ''} ${r.owner || ''} ${r.category || ''}`.toLowerCase()
+      if (!hay.includes(q)) return false
+    }
+    return true
+  })
+
 
   function exportToExcel() {
     // Friendly column names, now including owner and category so buyers can filter.
@@ -39,6 +45,7 @@ const visible = search.trim()
       Product: r.name,
       Owner: r.owner || '',
       Category: r.category || '',
+      Position: r.location_code ? `${r.location_code} — ${r.location_name}` : '',
       'On hand': r.on_hand,
     }))
     const worksheet = XLSX.utils.json_to_sheet(exportRows)
@@ -61,6 +68,12 @@ const visible = search.trim()
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+        <div className="filter-row">
+          <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}>
+            <option value="">Owner: all</option>
+            {owners.map((o) => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="list-actions">
@@ -71,7 +84,7 @@ const visible = search.trim()
 
       <div className="filter-summary">
         <span>{visible.length} of {rows.length}</span>
-        {search && <button className="btn-link" onClick={() => setSearch('')}>Clear search</button>}
+        {(search || ownerFilter) && <button className="btn-link" onClick={() => { setSearch(''); setOwnerFilter('') }}>Clear filters</button>}
       </div>
 
       {visible.length === 0 ? (
@@ -84,6 +97,7 @@ const visible = search.trim()
               <th>Name</th>
               <th>Owner</th>
               <th>Category</th>
+              <th>Position</th>
               <th className="num">On hand</th>
             </tr>
           </thead>
@@ -94,6 +108,7 @@ const visible = search.trim()
                 <td>{r.name}</td>
                 <td>{r.owner || '—'}</td>
                 <td>{r.category || '—'}</td>
+                <td>{r.location_code ? `${r.location_code} — ${r.location_name}` : '—'}</td>
                 <td className="num">{r.on_hand}</td>
               </tr>
             ))}

@@ -5,6 +5,10 @@ import { supabase } from './supabaseClient'
 // The full list of screens the app has, grouped, so the tick-list reads sensibly.
 // screen_key must match the keys in App.jsx's SCREENS map.
 const SCREEN_CATALOGUE = [
+    { group: 'Overview', screens: [
+    { key: 'dashboard', label: 'Dashboard' },
+    { key: 'insights', label: 'Insights' },
+  ]},
   { group: 'Stock', screens: [
     { key: 'stock', label: 'Stock on hand' },
     { key: 'stocklevels', label: 'Stock levels' },
@@ -22,6 +26,8 @@ const SCREEN_CATALOGUE = [
   { group: 'Movements', screens: [
     { key: 'receipt', label: 'Receive stock' },
     { key: 'issue', label: 'Issue / return' },
+    { key: 'assetmove', label: 'Asset move' },
+    { key: 'pickcreate', label: 'Create pick' },
     { key: 'pickupload', label: 'Upload pick list' },
     { key: 'picklist', label: 'Pick lists' },
   ]},

@@ -10,6 +10,14 @@ const STATUS_LABEL = {
   completed_with_errors: 'Completed with issues',
   cancelled: 'Cancelled',
 }
+// Dates come back as plain 'yyyy-mm-dd' strings. Split rather than parse,
+// so no timezone can shift the day.
+function ukDate(d) {
+  if (!d) return '—'
+  const [y, m, day] = String(d).split('-')
+  if (!y || !m || !day) return d
+  return `${day}-${m}-${y}`
+}
 
 export default function PickList() {
   const [picks, setPicks] = useState([])
@@ -26,11 +34,13 @@ export default function PickList() {
   const [pickedQty, setPickedQty] = useState({})
   const [chosenAssets, setChosenAssets] = useState({})
   const [availableAssets, setAvailableAssets] = useState({})
+  const [alreadyOnSite, setAlreadyOnSite] = useState({})
   const [holderId, setHolderId] = useState('')
   const [note, setNote] = useState('')
   const [working, setWorking] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [confirmComplete, setConfirmComplete] = useState(false)
+  const [ticked, setTicked] = useState({})   // visual only, never saved
 
   // Bespoke line adder
   const [bespokeDesc, setBespokeDesc] = useState('')
@@ -84,7 +94,7 @@ export default function PickList() {
   async function openOne(pick) {
     setOpenPick(pick)
     setLinesLoading(true)
-    setPickedQty({}); setChosenAssets({}); setAvailableAssets({}); setNote(pick.note || '')
+    setPickedQty({}); setChosenAssets({}); setAvailableAssets({}); setAlreadyOnSite({}); setNote(pick.note || ''); setTicked({})
     setConfirmCancel(false); setConfirmComplete(false)
     setBespokeDesc(''); setBespokeQty('1'); setBespokePo(''); setBespokeMethod('delivered'); setBespokeSupplier(''); setBespokeLocation('')
     setEditLineId(null)
@@ -104,6 +114,7 @@ export default function PickList() {
 
     const assetLines = ordered.filter((l) => !l.is_bespoke && l.products?.tracking_type === 'asset')
     const avail = {}
+    const onSite = {}
     for (const l of assetLines) {
       const { data: units } = await supabase
         .from('assets')
@@ -113,8 +124,18 @@ export default function PickList() {
         .not('asset_code', 'is', null)
         .order('asset_code')
       avail[l.id] = units || []
+
+      // Already on this pick's project, i.e. sent out some other way.
+      const { count } = await supabase
+        .from('assets')
+        .select('id', { count: 'exact', head: true })
+        .eq('product_id', l.product_id)
+        .eq('project_id', pick.project_id)
+        .not('asset_code', 'is', null)
+      onSite[l.id] = count || 0
     }
     setAvailableAssets(avail)
+    setAlreadyOnSite(onSite)
     setLinesLoading(false)
   }
 
@@ -127,6 +148,9 @@ export default function PickList() {
   function chosenCount(lineId) {
     const c = chosenAssets[lineId] || {}
     return Object.values(c).filter(Boolean).length
+  }
+  function toggleTick(lineId) {
+    setTicked((prev) => ({ ...prev, [lineId]: !prev[lineId] }))
   }
 
   async function addBespokeLine() {
@@ -223,6 +247,25 @@ export default function PickList() {
     setOpenPick(null); setLines([])
   }
 
+  // Reconcile a line whose units were sent to site outside this pick.
+  // The goods already moved via Asset move, so this is not a stock movement
+  // or an asset move, only a correction to the line's picked count. Written
+  // straight to pick_lines, the same direct-write path the bespoke edits use.
+  async function markDelivered(line, count) {
+    setError(null); setWorking(true)
+    const already = Number(line.picked_qty || 0)
+    const outstanding = Number(line.qty) - already
+    const toMark = Math.min(count, outstanding)
+
+    const { error } = await supabase
+      .from('pick_lines')
+      .update({ picked_qty: already + toMark })
+      .eq('id', line.id)
+    setWorking(false)
+    if (error) { setError(error.message); return }
+    await openOne(openPick)   // reload so the line shows fulfilled and the banner recounts
+  }
+
   async function cancelPick() {
     setError(null); setWorking(true)
     const { error } = await supabase.from('picks').update({ status: 'cancelled' }).eq('id', openPick.id)
@@ -270,8 +313,20 @@ export default function PickList() {
       if (!workable) return <span>{already} ({l.line_status})</span>
       if (outstanding <= 0) return <span style={{ color: '#1b5e20' }}>fulfilled</span>
       if (isAsset) {
+        const onSiteCount = alreadyOnSite[l.id] || 0
+        const markable = Math.min(onSiteCount, outstanding)
         return (
           <div>
+            {markable > 0 && (
+              <div className="form-warning" style={{ marginBottom: '0.4rem' }}>
+                {onSiteCount} already on site for this project. Sent outside this pick?
+                <div style={{ marginTop: '0.3rem' }}>
+                  <button className="btn-link" onClick={() => markDelivered(l, markable)} disabled={working}>
+                    Mark {markable} as fulfilled
+                  </button>
+                </div>
+              </div>
+            )}
             <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '0.3rem' }}>
               Need {outstanding} more ({chosenCount(l.id)} ticked):
             </div>
@@ -316,7 +371,7 @@ export default function PickList() {
             {openPick.projects ? `${openPick.projects.code} — ${openPick.projects.name}` : 'Pick'}
           </h3>
           <div style={{ fontSize: '0.85rem', color: '#666' }}>
-            Collection: {openPick.collection_date || '—'} · Status: {STATUS_LABEL[openPick.status] || openPick.status}
+            Collection: {ukDate(openPick.collection_date)} · Status: {STATUS_LABEL[openPick.status] || openPick.status}
           </div>
         </div>
 
@@ -331,14 +386,15 @@ export default function PickList() {
             <h4 className="detail-subhead">Master list items ({standardLines.length})</h4>
             <table className="data-table">
               <thead>
-                <tr><th>Code</th><th>Product</th><th>Location</th><th className="num">Wanted</th><th className="num">Already</th><th>{workable ? 'Pick now' : 'Picked'}</th></tr>
+                <tr><th></th><th>Code</th><th>Product</th><th>Location</th><th className="num">Wanted</th><th className="num">Already</th><th>{workable ? 'Pick now' : 'Picked'}</th></tr>
               </thead>
               <tbody>
                 {standardLines.map((l) => {
                   const already = Number(l.picked_qty || 0)
                   const outstanding = Number(l.qty) - already
                   return (
-                    <tr key={l.id} className={outstanding > 0 ? 'row-soon' : ''}>
+                    <tr key={l.id} className={ticked[l.id] ? 'row-done' : (outstanding > 0 ? 'row-soon' : '')}>
+                      <td><input type="checkbox" checked={!!ticked[l.id]} onChange={() => toggleTick(l.id)} title="Just a visual tick, nothing is saved" /></td>
                       <td>{l.products?.code || '—'}</td>
                       <td>{l.products?.name || '—'}</td>
                       <td>{l.products?.locations ? `${l.products.locations.code} — ${l.products.locations.name}` : '—'}</td>
@@ -358,7 +414,7 @@ export default function PickList() {
               ) : (
                 <table className="data-table">
                   <thead>
-                    <tr><th>Description</th><th>PO</th><th>Supply</th><th className="num">Wanted</th><th className="num">Already</th><th>{workable ? 'Pick now' : 'Picked'}</th>{workable && <th></th>}</tr>
+                    <tr><th></th><th>Description</th><th>PO</th><th>Supply</th><th className="num">Wanted</th><th className="num">Already</th><th>{workable ? 'Pick now' : 'Picked'}</th>{workable && <th></th>}</tr>
                   </thead>
                   <tbody>
                     {bespokeLines.map((l) => {
@@ -367,7 +423,8 @@ export default function PickList() {
                       const isEditing = editLineId === l.id
                       return (
                         <>
-                          <tr key={l.id} className={outstanding > 0 ? 'row-soon' : ''}>
+                          <tr key={l.id} className={ticked[l.id] ? 'row-done' : (outstanding > 0 ? 'row-soon' : '')}>
+                            <td><input type="checkbox" checked={!!ticked[l.id]} onChange={() => toggleTick(l.id)} title="Just a visual tick, nothing is saved" /></td>
                             <td>{l.description}</td>
                             <td>{l.po_number || '—'}</td>
                             <td>{supplyLabel(l)}</td>
@@ -384,7 +441,7 @@ export default function PickList() {
                           </tr>
                           {isEditing && workable && (
                             <tr>
-                              <td colSpan="7">
+                              <td colSpan="8">
                                 <div className="detail-edit" style={{ margin: '0.25rem 0' }}>
                                   <div className="form-field">
                                     <label>PO number (optional)</label>
@@ -543,7 +600,7 @@ export default function PickList() {
               return (
                 <tr key={p.id} className={workable ? 'clickable-row' : ''}>
                   <td>{p.projects ? `${p.projects.code} — ${p.projects.name}` : '—'}</td>
-                  <td>{p.collection_date || '—'}</td>
+                  <td>{ukDate(p.collection_date)}</td>
                   <td>{STATUS_LABEL[p.status] || p.status}</td>
                   <td><button className="btn-link" onClick={() => openOne(p)}>{workable ? 'Open pick' : 'View'}</button></td>
                 </tr>
