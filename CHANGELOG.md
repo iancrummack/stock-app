@@ -2,6 +2,27 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.13.0] - 2026-07-28
+
+- Updated the `stamp_pick_completed` trigger to stamp `completed_at` on `dispatched`, so turnaround keeps recording under the renamed terminal state. Without this, dispatched picks would silently record no completion time.
+
+### Decisions
+- Pick workflow now has five states, not three. Stock still moves only on Save, via `commit_pick`, unchanged. The new status buttons drive the workflow past picking. We chose this lighter model over deferring all stock movement to Dispatch, to keep risk low and leave `commit_pick` untouched.
+- Cancel does not yet return issued stock to available. This is a known follow-up, deliberately held back as its own job rather than folded in here.
+- Every forward button saves before it sets its status. Safe because `commit_pick` only ever moves the newly-typed increment, so a blank box moves nothing and saving on every button cannot double-count.
+
+### Added
+- Two new pick statuses, `short_picked` (Picked as far as possible) and `ready` (Ready to dispatch), sitting between In progress and Dispatched, so the buyer can see at a glance when the warehouse has done all it can and a balance needs ordering.
+- Dispatch is now a distinct step with a short confirm, separating "picked and ready in the warehouse" from "gone on the van."
+
+### Changed
+- Terminal state renamed from `completed` to `dispatched`. Legacy `completed` and `completed_with_errors` rows still display as Dispatched and are left untouched.
+- Quantity boxes now start blank instead of pre-filled to the required amount. The op types what was actually picked, which removes the footgun where a blind Save marked every untouched line fulfilled.
+- Status buttons now save the pick as part of setting the status, so the op cannot lose a final pick by pressing a status button before saving.
+
+### Fixed
+- Widened the `picks_status_check` database constraint to permit the new status values while keeping legacy values valid.
+
 ## [0.12.0] - 2026-07-14
 
 ### Added

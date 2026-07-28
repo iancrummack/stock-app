@@ -4,12 +4,21 @@ import * as XLSX from 'xlsx'
 import { supabase } from './supabaseClient'
 
 const STATUS_LABEL = {
-  open: 'Open',
-  part_picked: 'Part-picked (in progress)',
-  completed: 'Completed',
-  completed_with_errors: 'Completed with issues',
+  open: 'Not started',
+  part_picked: 'In progress',
+  short_picked: 'Picked as far as possible',
+  ready: 'Ready to dispatch',
+  dispatched: 'Dispatched',
+  completed: 'Dispatched',                       // legacy, pre five-state
+  completed_with_errors: 'Dispatched (shortfall)', // legacy, pre five-state
   cancelled: 'Cancelled',
 }
+
+// A pick can be opened and worked (stock saved against it) in these states.
+// Everything past dispatch is view-only.
+const WORKABLE_STATUSES = ['open', 'part_picked', 'short_picked', 'ready']
+function isWorkable(status) { return WORKABLE_STATUSES.includes(status) }
+
 // Dates come back as plain 'yyyy-mm-dd' strings. Split rather than parse,
 // so no timezone can shift the day.
 function ukDate(d) {
@@ -39,7 +48,7 @@ export default function PickList() {
   const [note, setNote] = useState('')
   const [working, setWorking] = useState(false)
   const [confirmCancel, setConfirmCancel] = useState(false)
-  const [confirmComplete, setConfirmComplete] = useState(false)
+  const [confirmDispatch, setConfirmDispatch] = useState(false)
   const [ticked, setTicked] = useState({})   // visual only, never saved
 
   // Bespoke line adder
@@ -95,7 +104,7 @@ export default function PickList() {
     setOpenPick(pick)
     setLinesLoading(true)
     setPickedQty({}); setChosenAssets({}); setAvailableAssets({}); setAlreadyOnSite({}); setNote(pick.note || ''); setTicked({})
-    setConfirmCancel(false); setConfirmComplete(false)
+    setConfirmCancel(false); setConfirmDispatch(false)
     setBespokeDesc(''); setBespokeQty('1'); setBespokePo(''); setBespokeMethod('delivered'); setBespokeSupplier(''); setBespokeLocation('')
     setEditLineId(null)
     setHolderId(pick.holder_id ? String(pick.holder_id) : '')
@@ -103,11 +112,12 @@ export default function PickList() {
     const ordered = await loadLines(pick.id)
     setLines(ordered)
 
+    // Start every quantity box blank. The op types what was actually picked,
+    // rather than the box pre-claiming the full outstanding amount.
     const initialQty = {}
     for (const l of ordered) {
       if (l.is_bespoke || l.products?.tracking_type !== 'asset') {
-        const outstanding = Number(l.qty) - Number(l.picked_qty || 0)
-        initialQty[l.id] = outstanding > 0 ? outstanding : 0
+        initialQty[l.id] = ''
       }
     }
     setPickedQty(initialQty)
@@ -176,8 +186,7 @@ export default function PickList() {
       const next = { ...prev }
       for (const l of ordered) {
         if (next[l.id] == null && (l.is_bespoke || l.products?.tracking_type !== 'asset')) {
-          const outstanding = Number(l.qty) - Number(l.picked_qty || 0)
-          next[l.id] = outstanding > 0 ? outstanding : 0
+          next[l.id] = ''   // new lines start blank too
         }
       }
       return next
@@ -229,22 +238,27 @@ export default function PickList() {
     })
   }
 
-  async function run(finalise) {
-    setError(null)
-    setWorking(true)
+  // Every forward action saves first, then sets the status. commit_pick moves
+  // only newly-typed stock, and a blank box (the state after every save) moves
+  // nothing, so this can't double-count. The point is that the op can't lose a
+  // final pick by jumping straight to a status button, the save is folded in.
+  async function commitThenStatus(newStatus) {
+    setError(null); setWorking(true)
     if (holderId) {
       await supabase.from('picks').update({ holder_id: Number(holderId) }).eq('id', openPick.id)
     }
-    const { error } = await supabase.rpc('commit_pick', {
+    const { error: commitErr } = await supabase.rpc('commit_pick', {
       p_pick_id: openPick.id,
       p_lines: buildPayload(),
       p_note: note || null,
-      p_finalise: finalise,
+      p_finalise: false,
     })
+    if (commitErr) { setWorking(false); setError(commitErr.message); return }
+    const { error: statusErr } = await supabase.from('picks').update({ status: newStatus }).eq('id', openPick.id)
     setWorking(false)
-    if (error) { setError(error.message); return }
+    if (statusErr) { setError(statusErr.message); return }
     await loadPicks()
-    setOpenPick(null); setLines([])
+    setOpenPick(null); setLines([]); setConfirmDispatch(false)
   }
 
   // Reconcile a line whose units were sent to site outside this pick.
@@ -301,7 +315,7 @@ export default function PickList() {
   if (error && !openPick) return <p className="error">{error}</p>
 
   if (openPick) {
-    const workable = openPick.status === 'open' || openPick.status === 'part_picked'
+    const workable = isWorkable(openPick.status)
     const anyOutstanding = lines.some((l) => Number(l.qty) - Number(l.picked_qty || 0) > 0)
     const standardLines = lines.filter((l) => !l.is_bespoke)
     const bespokeLines = lines.filter((l) => l.is_bespoke)
@@ -540,30 +554,46 @@ export default function PickList() {
                   <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="optional" />
                 </div>
 
-                {!confirmComplete ? (
-                  <div className="pick-commit-actions" style={{ marginTop: '0.75rem' }}>
-                    <button className="btn-secondary" onClick={() => run(false)} disabled={working}>
-                      {working ? 'Saving…' : 'Save progress'}
-                    </button>
-                    <button onClick={() => setConfirmComplete(true)} disabled={working}>Complete &amp; dispatch</button>
-                    {!confirmCancel && (
-                      <button className="btn-secondary" onClick={() => setConfirmCancel(true)} disabled={working}>Cancel job</button>
-                    )}
-                  </div>
-                ) : (
+                <div className="pick-commit-actions" style={{ marginTop: '0.75rem' }}>
+                  <button className="btn-secondary" onClick={() => commitThenStatus('part_picked')} disabled={working}>
+                    {working ? 'Saving…' : 'Save progress'}
+                  </button>
+
+                  {(openPick.status === 'open' || openPick.status === 'part_picked') && (
+                    <>
+                      <button onClick={() => commitThenStatus('short_picked')} disabled={working}>Picked as far as possible</button>
+                      <button onClick={() => commitThenStatus('ready')} disabled={working}>Ready to dispatch</button>
+                    </>
+                  )}
+                  {openPick.status === 'short_picked' && (
+                    <>
+                      <button onClick={() => commitThenStatus('ready')} disabled={working}>Ready to dispatch</button>
+                      <button onClick={() => setConfirmDispatch(true)} disabled={working}>Dispatch</button>
+                    </>
+                  )}
+                  {openPick.status === 'ready' && (
+                    <button onClick={() => setConfirmDispatch(true)} disabled={working}>Dispatch</button>
+                  )}
+
+                  {!confirmCancel && !confirmDispatch && (
+                    <button className="btn-secondary" onClick={() => setConfirmCancel(true)} disabled={working}>Cancel job</button>
+                  )}
+                </div>
+
+                {confirmDispatch && (
                   <div className="form-warning" style={{ marginTop: '0.75rem' }}>
-                    Completing dispatches this job and it can't be amended afterwards.
-                    {anyOutstanding ? ' Some lines are still short — they will go as shortfalls.' : ' Everything is picked.'}
+                    Dispatching drops this job off the live list. It isn't deleted, tick "Show completed and cancelled too" to see it again.
+                    {anyOutstanding ? ' This job still has a shortfall, that balance will not be fulfilled from stock.' : ' Everything is picked.'}
                     <div className="pick-commit-actions" style={{ marginTop: '0.5rem' }}>
-                      <button onClick={() => run(true)} disabled={working}>{working ? 'Dispatching…' : 'Yes, complete & dispatch'}</button>
-                      <button className="btn-secondary" onClick={() => setConfirmComplete(false)} disabled={working}>Back</button>
+                      <button onClick={() => commitThenStatus('dispatched')} disabled={working}>{working ? 'Dispatching…' : 'Yes, dispatch'}</button>
+                      <button className="btn-secondary" onClick={() => setConfirmDispatch(false)} disabled={working}>Back</button>
                     </div>
                   </div>
                 )}
 
-                {confirmCancel && !confirmComplete && (
+                {confirmCancel && !confirmDispatch && (
                   <div className="form-warning" style={{ marginTop: '0.75rem' }}>
-                    You're cancelling this pick. Its items will return to available stock. Are you sure?
+                    You're cancelling this pick. It drops off the live list but isn't deleted. Are you sure?
                     <div className="pick-commit-actions" style={{ marginTop: '0.5rem' }}>
                       <button onClick={cancelPick} disabled={working} style={{ background: '#b71c1c' }}>Yes, cancel job</button>
                       <button className="btn-secondary" onClick={() => setConfirmCancel(false)} disabled={working}>No, keep it</button>
@@ -578,8 +608,7 @@ export default function PickList() {
     )
   }
 
-  const activeStatuses = ['open', 'part_picked']
-  const visible = showAll ? picks : picks.filter((p) => activeStatuses.includes(p.status))
+  const visible = showAll ? picks : picks.filter((p) => isWorkable(p.status))
 
   return (
     <div>
@@ -596,7 +625,7 @@ export default function PickList() {
           </thead>
           <tbody>
             {visible.map((p) => {
-              const workable = p.status === 'open' || p.status === 'part_picked'
+              const workable = isWorkable(p.status)
               return (
                 <tr key={p.id} className={workable ? 'clickable-row' : ''}>
                   <td>{p.projects ? `${p.projects.code} — ${p.projects.name}` : '—'}</td>

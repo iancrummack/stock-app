@@ -4,8 +4,13 @@ import * as XLSX from 'xlsx'
 import { supabase } from './supabaseClient'
 
 const SHEET_NAME = 'Site Set Up & Signage'
+const SHEET_PHASE2 = 'Materials'
 
 // Site Manager Box rule: if the box is "Need", the sector picks which box product.
+
+// Phase rule (one client only): the main tab carries a "Phase" label with its
+// value in column D. A value of 2 means the item list lives on the Materials
+// tab instead, and the main tab's list is disregarded entirely.
 
 export default function PickUpload() {
   const [parsing, setParsing] = useState(false)
@@ -14,6 +19,7 @@ export default function PickUpload() {
   const [creating, setCreating] = useState(false)
   const [done, setDone] = useState(null)
   const [showFlagged, setShowFlagged] = useState(false)
+  const [dupeAcknowledged, setDupeAcknowledged] = useState(false)
 
   function findByLabel(rows, label) {
     for (let r = 0; r < rows.length; r++) {
@@ -25,10 +31,47 @@ export default function PickUpload() {
     return null
   }
 
+  // Whole-cell match on "Phase" in any column, value taken from column D on
+  // that row. Whole-cell rather than startsWith, so a product description
+  // containing the word can never trigger it.
+  function findPhase(rows) {
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r] || []
+      for (let c = 0; c < row.length; c++) {
+        const cell = row[c]
+        if (cell != null && String(cell).trim().toLowerCase() === 'phase') {
+          return row[3]
+        }
+      }
+    }
+    return null
+  }
+
+  // Excel dates arrive as a Date, a serial number or a string. Normalise to
+  // yyyy-mm-dd built from local parts, so no timezone shifts the day back.
+  function toISODate(raw) {
+    if (raw == null || raw === '') return null
+    let d = null
+    if (raw instanceof Date) {
+      d = raw
+    } else if (!isNaN(Number(raw))) {
+      const parsed = XLSX.SSF ? XLSX.SSF.parse_date_code(Number(raw)) : null
+      if (parsed) d = new Date(parsed.y, parsed.m - 1, parsed.d)
+    } else {
+      d = new Date(raw)
+    }
+    if (!d || isNaN(d.getTime())) return null
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    return `${y}-${m}-${day}`
+  }
+
   async function handleFile(e) {
     const file = e.target.files?.[0]
     if (!file) return
     setError(null); setResult(null); setDone(null); setParsing(true); setShowFlagged(false)
+    setDupeAcknowledged(false)
 
     try {
       const buf = await file.arrayBuffer()
@@ -36,13 +79,41 @@ export default function PickUpload() {
       if (!wb.SheetNames.includes(SHEET_NAME)) {
         setError(`Couldn't find a tab called "${SHEET_NAME}" in this file.`); setParsing(false); return
       }
-      const sheet = wb.Sheets[SHEET_NAME]
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, defval: null })
+      const mainRows = XLSX.utils.sheet_to_json(wb.Sheets[SHEET_NAME], { header: 1, raw: false, defval: null })
 
-      const projectName = findByLabel(rows, 'Project Name')
-      const jobNumber = findByLabel(rows, 'Project Job Number')
-      const collectionRaw = findByLabel(rows, 'Collection Date')
-      const sectorRaw = findByLabel(rows, 'Sector')
+      // Decide which tab holds the item list. The marker always lives on the
+      // main tab, so it is read before anything else.
+      const phaseRaw = findPhase(mainRows)
+      const isPhase2 = String(phaseRaw ?? '').trim() === '2'
+
+      let rows = mainRows
+      let sheetUsed = SHEET_NAME
+      if (isPhase2) {
+        // Hard stop, not a soft warning. Falling back to the main tab here
+        // would build a pick from the phase 1 list and ship the same kit twice.
+        if (!wb.SheetNames.includes(SHEET_PHASE2)) {
+          setError(`This file says Phase 2, but there's no "${SHEET_PHASE2}" tab to read the list from. Check the file before uploading.`)
+          setParsing(false); return
+        }
+        rows = XLSX.utils.sheet_to_json(wb.Sheets[SHEET_PHASE2], { header: 1, raw: false, defval: null })
+        sheetUsed = SHEET_PHASE2
+      }
+
+      // Identity fields fall back to the main tab if the Materials copy comes
+      // back empty, since the formulas assert they are the same job.
+      const readHeader = (label) => {
+        const v = findByLabel(rows, label)
+        if (v != null && String(v).trim() !== '') return v
+        return isPhase2 ? findByLabel(mainRows, label) : null
+      }
+
+      const projectName = readHeader('Project Name')
+      const jobNumber = readHeader('Project Job Number')
+      const collectionRaw = readHeader('Collection Date')
+      const sectorRaw = readHeader('Sector')
+
+      // Deliberately NOT falling back. If the phase 2 tab doesn't ask for a
+      // site manager box, inheriting "Need" from phase 1 would ship a second one.
       const smBoxRaw = findByLabel(rows, 'Site Manager Box')
 
       let headerRow = -1
@@ -147,7 +218,6 @@ export default function PickUpload() {
     // ---- Site Manager Box rule ----
       const smBox = String(smBoxRaw || '').trim().toLowerCase()
       if (smBox === 'need') {
-        const sector = String(sectorRaw || '').trim().toUpperCase()
         const smKit = kitsByCode[sector]
         if (!smKit) {
           flagged.push({
@@ -170,28 +240,36 @@ export default function PickUpload() {
         }
       }
 
-      let collectionDate = null
-      if (collectionRaw != null && collectionRaw !== '') {
-        let d = null
-        if (collectionRaw instanceof Date) {
-          d = collectionRaw
-        } else if (!isNaN(Number(collectionRaw))) {
-          // Excel serial number → date (SheetJS helper), fallback if cellDates missed it.
-          const parsed = XLSX.SSF ? XLSX.SSF.parse_date_code(Number(collectionRaw)) : null
-          if (parsed) d = new Date(parsed.y, parsed.m - 1, parsed.d)
-        } else {
-          d = new Date(collectionRaw)
-        }
-        if (d && !isNaN(d.getTime())) {
-          // Build the yyyy-mm-dd from local parts, so no timezone shifts the day back.
-          const y = d.getFullYear()
-          const m = String(d.getMonth() + 1).padStart(2, '0')
-          const day = String(d.getDate()).padStart(2, '0')
-          collectionDate = `${y}-${m}-${day}`
-        }
+      const collectionDate = toISODate(collectionRaw)
+
+      // On a phase 2 list the date is a formula copying phase 1's. If it still
+      // reads the same, it may simply never have been overtyped. We can't tell
+      // a deliberate match from an untouched formula, so we say so and let the
+      // person judge.
+      let dateEchoesPhase1 = false
+      if (isPhase2 && collectionDate) {
+        const mainDate = toISODate(findByLabel(mainRows, 'Collection Date'))
+        dateEchoesPhase1 = mainDate != null && mainDate === collectionDate
       }
 
-      setResult({ projectName, jobNumber, project, collectionDate, matched, flagged })
+      // Same job, same collection date, still live: probably a re-upload or a
+      // phase 2 list whose date was never changed.
+      let duplicate = null
+      if (project && collectionDate) {
+        const { data: dupes } = await supabase
+          .from('picks')
+          .select('id, status, created_at, collection_date, source')
+          .eq('project_id', project.id)
+          .eq('collection_date', collectionDate)
+          .neq('status', 'cancelled')
+          .order('created_at', { ascending: false })
+        duplicate = (dupes && dupes[0]) || null
+      }
+
+      setResult({
+        projectName, jobNumber, project, collectionDate, matched, flagged,
+        sheetUsed, isPhase2, dateEchoesPhase1, duplicate,
+      })
     } catch (err) {
       setError('Could not read this file: ' + err.message)
     }
@@ -223,6 +301,7 @@ export default function PickUpload() {
           <h3 className="form-title">Upload a pick list</h3>
           <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
             Select the master list Excel file. It reads the "{SHEET_NAME}" tab, matches items by I.D (kits expand automatically), and shows a summary before creating the pick.
+            If the sheet is marked Phase 2, it reads the "{SHEET_PHASE2}" tab instead and disregards the main list.
           </p>
           <div className="form-field">
             <input type="file" accept=".xlsx,.xls" onChange={handleFile} disabled={parsing} />
@@ -243,12 +322,48 @@ export default function PickUpload() {
                   : <span style={{ color: '#b71c1c' }}> ✗ no matching project found</span>}
               </div>
               <div><strong>Collection date:</strong> {result.collectionDate || <span style={{ color: '#b71c1c' }}>couldn't read a date</span>}</div>
+              <div>
+                <strong>Read from tab:</strong> {result.sheetUsed}
+                {result.isPhase2 && <span style={{ color: '#8a6d00' }}> (phase 2, the main list was disregarded)</span>}
+              </div>
               <div style={{ marginTop: '0.5rem' }}>
                 <strong style={{ color: '#1b5e20' }}>{result.matched.length} lines</strong>
                 {result.flagged.length > 0 && <strong style={{ color: '#b71c1c' }}> · {result.flagged.length} flagged</strong>}
               </div>
             </div>
           </div>
+
+          {result.dateEchoesPhase1 && (
+            <div className="form-warning" style={{ marginTop: '1rem', maxWidth: 640 }}>
+              This phase 2 list has the same collection date as the phase 1 tab. That's fine if
+              both are collected the same day, but it's also what you'd see if the date was left
+              as the copied formula. Worth a look before creating.
+            </div>
+          )}
+
+          {result.duplicate && (
+            <div className="form-warning" style={{ marginTop: '1rem', maxWidth: 640 }}>
+              <strong>There's already a pick for this job on this date.</strong>
+              <div style={{ marginTop: '0.3rem', fontSize: '0.9rem' }}>
+                {result.project?.code} · collection {result.collectionDate} ·
+                status {result.duplicate.status} ·
+                created {String(result.duplicate.created_at).slice(0, 10).split('-').reverse().join('-')}
+                {result.duplicate.source === 'manual' && ' · created by hand'}
+              </div>
+              <div style={{ marginTop: '0.4rem', fontSize: '0.9rem' }}>
+                Creating this will make a second pick, and both will reserve stock. Check the
+                existing one first if you're not sure.
+              </div>
+              <label style={{ display: 'block', marginTop: '0.5rem', fontSize: '0.9rem' }}>
+                <input
+                  type="checkbox"
+                  checked={dupeAcknowledged}
+                  onChange={(e) => setDupeAcknowledged(e.target.checked)}
+                />{' '}
+                I've checked, this isn't a duplicate
+              </label>
+            </div>
+          )}
 
           {result.flagged.length > 0 && (() => {
             // Group the flagged rows by reason for the collapsed summary.
@@ -314,7 +429,10 @@ export default function PickUpload() {
           {error && <div className="form-error" style={{ marginTop: '1rem' }}>{error}</div>}
 
           <div className="pick-commit-actions" style={{ marginTop: '1rem' }}>
-            <button onClick={createPick} disabled={creating || result.matched.length === 0}>
+            <button
+              onClick={createPick}
+              disabled={creating || result.matched.length === 0 || (result.duplicate && !dupeAcknowledged)}
+            >
               {creating ? 'Creating…' : `Create pick (${result.matched.length} lines)`}
             </button>
             <button className="btn-secondary" onClick={() => setResult(null)} disabled={creating}>Start over</button>
