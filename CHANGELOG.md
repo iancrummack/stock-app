@@ -2,6 +2,11 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.13.1] - 2026-07-29
+
+### Added
+- Owner column on the asset register, sourced from the product's owner, shown in the table and included in the Excel export.
+
 ## [0.13.0] - 2026-07-28
 
 - Updated the `stamp_pick_completed` trigger to stamp `completed_at` on `dispatched`, so turnaround keeps recording under the renamed terminal state. Without this, dispatched picks would silently record no completion time.

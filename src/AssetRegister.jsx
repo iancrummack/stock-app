@@ -67,6 +67,7 @@ export default function AssetRegister() {
     const exportRows = visible.map((r) => ({
       Code: r.asset_code || '',
       Type: r.asset_type || '',
+      Owner: r.owner || '',
       Condition: r.condition || '',
       Status: r.status || '',
       Position: r.current_position || '',
@@ -135,6 +136,7 @@ export default function AssetRegister() {
             <tr>
               <th>Code</th>
               <th>Type</th>
+              <th>Owner</th>
               <th>Condition</th>
               <th>Status</th>
               <th>Position</th>
@@ -146,6 +148,7 @@ export default function AssetRegister() {
               <tr key={r.asset_id} className="clickable-row" onClick={() => setOpenId(r.asset_id)}>
                 <td>{r.asset_code || '—'}</td>
                 <td>{r.asset_type}</td>
+                <td>{r.owner || '—'}</td>
                 <td>{r.condition}</td>
                 <td>{r.status}</td>
                 <td>{r.current_position}</td>
