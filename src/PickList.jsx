@@ -270,14 +270,23 @@ export default function PickList() {
     const already = Number(line.picked_qty || 0)
     const outstanding = Number(line.qty) - already
     const toMark = Math.min(count, outstanding)
+    const newTotal = already + toMark
 
     const { error } = await supabase
       .from('pick_lines')
-      .update({ picked_qty: already + toMark })
+      .update({ picked_qty: newTotal })
       .eq('id', line.id)
     setWorking(false)
     if (error) { setError(error.message); return }
-    await openOne(openPick)   // reload so the line shows fulfilled and the banner recounts
+
+    // Update just this line in place so it shows fulfilled and the outstanding
+    // banner recounts, without a full reload that would wipe the consumable
+    // quantities the op has typed but not yet saved.
+    setLines((prev) => prev.map((l) =>
+      l.id === line.id
+        ? { ...l, picked_qty: newTotal, line_status: newTotal >= Number(l.qty) ? 'picked' : 'short' }
+        : l
+    ))
   }
 
   async function cancelPick() {
