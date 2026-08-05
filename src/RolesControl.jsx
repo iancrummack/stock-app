@@ -18,6 +18,7 @@ const SCREEN_CATALOGUE = [
   ]},
   { group: 'Assets', screens: [
     { key: 'assets', label: 'Asset register' },
+    { key: 'assetstocklevels', label: 'Asset stock levels' },
     { key: 'assetintake', label: 'Asset intake' },
     { key: 'uncoded', label: 'Uncoded assets' },
     { key: 'assetmove', label: 'Asset move' },

@@ -2,6 +2,23 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.14.0] - 2026-07-29
+
+### Added
+- Asset stock levels screen, one row per asset type showing total, in store, on site, under repair, and written off counts
+- Filter by owner or category, with export to Excel, matching the consumable Stock Levels screen
+
+### Added
+- Owner as a third asset stock take scope, alongside a specific bay or everything in store
+- Export to Excel on the asset stock take review screen, listing every checked asset with its found status
+- Owner column shown throughout the asset stock take screens
+
+### Added
+- Asset stock take, alongside the existing consumable stock take, with a mode toggle between the two
+- Count by a specific bay or everything currently in store
+- Tick list confirms assets found, flags anything not found without changing its status
+- Found and not found events are logged to each asset's history for a "last seen" record
+
 ## [0.13.1] - 2026-07-29
 
 ### Added

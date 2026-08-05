@@ -5,6 +5,7 @@ import Login from './Login'
 import StockOnHand from './StockOnHand'
 import StockLevels from './StockLevels'
 import AssetRegister from './AssetRegister'
+import AssetStockLevels from './AssetStockLevels'
 import AssetIntake from './AssetIntake'
 import UncodedAssets from './UncodedAssets'
 import AssetMove from './AssetMove'
@@ -36,6 +37,7 @@ const SCREENS = {
   stock:       StockOnHand,
   stocklevels: StockLevels,
   assets:      AssetRegister,
+  assetstocklevels: AssetStockLevels,
   assetintake: AssetIntake,
   uncoded:     UncodedAssets,
   assetmove:   AssetMove,
@@ -76,6 +78,7 @@ const NAV_GROUPS = [
   ]},
   { heading: 'Assets', items: [
     { key: 'assets',      label: 'Asset register' },
+    { key: 'assetstocklevels', label: 'Asset stock levels' },
     { key: 'assetintake', label: 'Asset intake' },
     { key: 'uncoded',     label: 'Uncoded assets' },
     { key: 'compliance',  label: 'Compliance' },

@@ -7,6 +7,7 @@ export default function Receipt({ receiptForm, setReceiptForm, resetReceipt }) {
   const [locations, setLocations] = useState([])
   const [lineProduct, setLineProduct] = useState('')
   const [lineQty, setLineQty] = useState('')
+  const [productSearch, setProductSearch] = useState('')
   const [status, setStatus] = useState(null)   // null | 'saving'
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
@@ -72,7 +73,7 @@ export default function Receipt({ receiptForm, setReceiptForm, resetReceipt }) {
 
   function clearReceipt() {
     resetReceipt()
-    setLineProduct(''); setLineQty(''); setError(null); setResult(null)
+    setLineProduct(''); setLineQty(''); setProductSearch(''); setError(null); setResult(null)
   }
 
   async function handleCommit() {
@@ -117,10 +118,27 @@ export default function Receipt({ receiptForm, setReceiptForm, resetReceipt }) {
       <div className="add-line">
         <div className="form-field grow">
           <label>Product</label>
-          <select value={lineProduct} onChange={(e) => setLineProduct(e.target.value)}>
-            <option value="">— choose a product —</option>
-            {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <input
+            type="text"
+            className="filter-search"
+            placeholder="Type to search products"
+            value={productSearch}
+            onChange={(e) => { setProductSearch(e.target.value); setLineProduct('') }}
+          />
+          {productSearch.trim() && (
+            <select value={lineProduct} onChange={(e) => setLineProduct(e.target.value)} style={{ marginTop: '0.3rem' }}>
+              <option value="">— pick from matches —</option>
+              {products.filter((p) => p.name.toLowerCase().includes(productSearch.trim().toLowerCase())).map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          )}
+          {!productSearch.trim() && (
+            <select value={lineProduct} onChange={(e) => setLineProduct(e.target.value)} style={{ marginTop: '0.3rem' }}>
+              <option value="">— choose a product —</option>
+              {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          )}
           {lineProduct && (
             homeBay(Number(lineProduct))
               ? <span className="stock-hint">Goes to: {homeBay(Number(lineProduct))}</span>
