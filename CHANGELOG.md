@@ -2,6 +2,18 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.15.0]  - 2026-08-13
+
+### Added
+- Cost report screen (Finance): contract cost summarised by month, one line per contract per month, filterable by contract and date range, with a "show zero-cost lines" toggle. Exports to Excel as a summary or full item-level detail.
+- Current stock value export, on the Cost report screen: values everything currently held in consumable stock, flags any product with no cost set rather than silently showing £0.
+- Stock lost report screen (Finance): losses identified from stock take adjustments, valued at unit cost, filterable by product/category/owner and date, flags missing costs the same way.
+- Unit cost and "Chargeable to contracts" fields on products (Products admin), shown for consumables only. Non-chargeable products never appear on the contract cost report in either direction, for stock that's reused from site rather than bought through the store.
+
+### Changed
+- `stock_movements` now carries `unit_cost` and `line_cost` on every line, snapshotted at the moment it's written, so historic cost stays accurate even if a product's standard cost changes later.
+- `stock_levels` view now includes `unit_cost`.
+
 ## [0.14.0] - 2026-07-29
 
 ### Added

@@ -14,6 +14,8 @@ const EMPTY = {
   description: '',
   is_key_item: false,
   min_level: '',
+  unit_cost: '',
+  is_chargeable: true,
 }
 
 export default function ProductsControl() {
@@ -34,10 +36,12 @@ export default function ProductsControl() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [sortBy, setSortBy] = useState('name')   // 'name' | 'position'
 
+  const PRODUCT_COLUMNS = 'id, code, name, tracking_type, unit_id, owner_id, category_id, default_location_id, description, is_key_item, min_level, unit_cost, is_chargeable'
+
   async function loadProducts() {
     const { data, error } = await supabase
       .from('products')
-      .select('id, code, name, tracking_type, unit_id, owner_id, category_id, default_location_id, description, is_key_item, min_level')
+      .select(PRODUCT_COLUMNS)
       .order('name')
     if (error) setError(error.message)
     else setProducts(data || [])
@@ -48,7 +52,7 @@ export default function ProductsControl() {
       setLoading(true)
       setError(null)
       const [prods, u, o, c, l] = await Promise.all([
-        supabase.from('products').select('id, code, name, tracking_type, unit_id, owner_id, category_id, default_location_id, description, is_key_item, min_level').order('name'),
+        supabase.from('products').select(PRODUCT_COLUMNS).order('name'),
         supabase.from('units').select('id, name').order('name'),
         supabase.from('owners').select('id, name:owner').order('owner'),
         supabase.from('categories').select('id, name').order('name'),
@@ -63,6 +67,7 @@ export default function ProductsControl() {
       setLoading(false)
     }
     loadAll()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function startNew() { setForm(EMPTY); setEditing(true); setError(null) }
@@ -80,6 +85,8 @@ export default function ProductsControl() {
       description: p.description || '',
       is_key_item: !!p.is_key_item,
       min_level: p.min_level ?? '',
+      unit_cost: p.unit_cost ?? '',
+      is_chargeable: p.is_chargeable ?? true,
     })
     setEditing(true)
     setError(null)
@@ -105,6 +112,8 @@ export default function ProductsControl() {
       description: form.description.trim() || null,
       is_key_item: !!form.is_key_item,
       min_level: form.min_level === '' ? null : Number(form.min_level),
+      unit_cost: isAsset || form.unit_cost === '' ? null : Number(form.unit_cost),
+      is_chargeable: isAsset ? true : !!form.is_chargeable,
     }
 
     setStatus('saving')
@@ -125,6 +134,7 @@ export default function ProductsControl() {
     return l ? `${l.code} — ${l.name}` : '—'
   }
   const locationSortKey = (id) => id ?? Number.MAX_SAFE_INTEGER
+  const costLabel = (v) => (v === null || v === undefined) ? '—' : `£${Number(v).toFixed(2)}`
 
   // Filter then sort the list.
   const visible = useMemo(() => {
@@ -209,6 +219,41 @@ export default function ProductsControl() {
               {locations.map((l) => <option key={l.id} value={l.id}>{l.code} — {l.name}</option>)}
             </select>
           </div>
+        )}
+
+        {!isAsset && (
+          <>
+            <div className="form-field">
+              <label>Unit cost (£, ex VAT)</label>
+              <input
+                type="number" min="0" step="0.01"
+                value={form.unit_cost}
+                onChange={(e) => setField('unit_cost', e.target.value)}
+                placeholder="e.g. 4.50"
+              />
+              {form.unit_cost === '' && (
+                <div className="form-warning" style={{ marginTop: '0.25rem' }}>
+                  Without a cost, this item won't contribute to the contract cost report.
+                </div>
+              )}
+            </div>
+
+            <div className="form-field">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={form.is_chargeable}
+                  onChange={(e) => setField('is_chargeable', e.target.checked)}
+                />{' '}
+                Chargeable to contracts
+              </label>
+              {!form.is_chargeable && (
+                <div className="form-warning" style={{ marginTop: '0.25rem' }}>
+                  Issues and returns of this item will never appear on the contract cost report, in either direction. Use this for items reused from site that weren't bought through the warehouse.
+                </div>
+              )}
+            </div>
+          </>
         )}
 
         <div className="form-field">
@@ -302,6 +347,8 @@ export default function ProductsControl() {
               <th>Owner</th>
               <th>Category</th>
               <th>Position</th>
+              <th>Cost</th>
+              <th>Chargeable</th>
               <th></th>
             </tr>
           </thead>
@@ -315,6 +362,8 @@ export default function ProductsControl() {
                 <td>{ownerName(p.owner_id)}</td>
                 <td>{categoryName(p.category_id)}</td>
                 <td>{p.tracking_type === 'asset' ? '—' : locationName(p.default_location_id)}</td>
+                <td>{p.tracking_type === 'asset' ? '—' : costLabel(p.unit_cost)}</td>
+                <td>{p.tracking_type === 'asset' ? '—' : (p.is_chargeable === false ? 'No' : 'Yes')}</td>
                 <td><button className="btn-link" onClick={() => startEdit(p)}>Edit</button></td>
               </tr>
             ))}

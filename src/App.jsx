@@ -30,6 +30,8 @@ import LocationsControl from './LocationsControl'
 import CreatePick from './CreatePick'
 import Dashboard from './Dashboard'
 import Insights from './Insights'
+import CostReport from './CostReport'
+import StockLossReport from './StockLossReport'
 import './App.css'
 
 // Screens, unchanged — just the component for each key.
@@ -60,6 +62,8 @@ const SCREENS = {
   pickcreate: CreatePick,
   dashboard: Dashboard,
   insights: Insights,
+  costreport: CostReport,
+  stockloss: StockLossReport,
 }
 
 // The same screens, now organised into named groups for the sidebar.
@@ -90,6 +94,10 @@ const NAV_GROUPS = [
     { key: 'assetmove',   label: 'Asset move' },
     { key: 'pickcreate',  label: 'Create pick' },
     { key: 'pickupload',  label: 'Upload pick list' },
+  ]},
+  { heading: 'Finance', items: [
+    { key: 'costreport',  label: 'Cost report' },
+    { key: 'stockloss',  label: 'Stock lost' },
   ]},
    { heading: 'Admin', items: [
     { key: 'products',          label: 'Products' },

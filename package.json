@@ -1,7 +1,7 @@
 {
   "name": "stock-app",
   "private": true,
-  "version": "0.14.0",
+  "version": "0.15.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -28,4 +28,4 @@
     "globals": "^17.6.0",
     "vite": "^8.1.0"
   }
-}
+}5
