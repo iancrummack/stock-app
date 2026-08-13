@@ -68,11 +68,12 @@ export default function CostReport() {
   const anyFilter = fContract || fFrom || fTo
 
   function exportSummary() {
+    // Real numbers here, not .toFixed() strings, so SUM/SUBTOTAL work in Excel.
     const exportRows = visible.map((r) => ({
       'Contract code': r.project_code,
       'Contract name': r.project_name,
       Month: monthLabel(r.cost_month),
-      'Total cost (£)': Number(r.total_cost || 0).toFixed(2),
+      'Total cost (£)': Number(r.total_cost || 0),
     }))
     const worksheet = XLSX.utils.json_to_sheet(exportRows)
     const workbook = XLSX.utils.book_new()
@@ -106,8 +107,8 @@ export default function CostReport() {
       Product: `${r.product_code} — ${r.product_name}`,
       Type: r.movement_type,
       Quantity: r.quantity,
-      'Unit cost (£)': r.unit_cost === null ? '' : Number(r.unit_cost).toFixed(2),
-      'Line cost (£)': Number(r.line_cost || 0).toFixed(2),
+      'Unit cost (£)': r.unit_cost === null ? '' : Number(r.unit_cost),
+      'Line cost (£)': Number(r.line_cost || 0),
     }))
     const worksheet = XLSX.utils.json_to_sheet(exportRows)
     const workbook = XLSX.utils.book_new()
@@ -123,8 +124,8 @@ export default function CostReport() {
       Category: r.category || '',
       Owner: r.owner || '',
       'On hand': r.on_hand,
-      'Unit cost (£)': hasCost(r) ? Number(r.unit_cost).toFixed(2) : 'Cost not set',
-      'Stock value (£)': hasCost(r) ? (Number(r.on_hand) * Number(r.unit_cost)).toFixed(2) : 'Cost not set',
+      'Unit cost (£)': hasCost(r) ? Number(r.unit_cost) : 'Cost not set',
+      'Stock value (£)': hasCost(r) ? Number(r.on_hand) * Number(r.unit_cost) : 'Cost not set',
     }))
     const worksheet = XLSX.utils.json_to_sheet(exportRows)
     const workbook = XLSX.utils.book_new()
