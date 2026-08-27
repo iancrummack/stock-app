@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from './supabaseClient'
+import POUploadPanel from './POUploadPanel'
 
 const STATUS_LABEL = {
   open: 'Not started',
@@ -41,6 +42,7 @@ export default function PickList() {
   const [linesLoading, setLinesLoading] = useState(false)
 
   const [pickedQty, setPickedQty] = useState({})
+  const [comments, setComments] = useState({})
   const [chosenAssets, setChosenAssets] = useState({})
   const [availableAssets, setAvailableAssets] = useState({})
   const [alreadyOnSite, setAlreadyOnSite] = useState({})
@@ -88,7 +90,7 @@ export default function PickList() {
   async function loadLines(pickId) {
     const { data } = await supabase
       .from('pick_lines')
-      .select('id, qty, picked_qty, line_status, product_id, is_bespoke, description, po_number, delivery_method, supplier_name, supplier_location, products(code, name, tracking_type, default_location_id, locations(code, name))')
+      .select('id, qty, picked_qty, line_status, product_id, is_bespoke, description, po_number, delivery_method, supplier_name, supplier_location, comment, products(code, name, tracking_type, default_location_id, locations(code, name))')
       .eq('pick_id', pickId)
 
     const standard = (data || []).filter((l) => !l.is_bespoke).sort((a, b) => {
@@ -103,7 +105,7 @@ export default function PickList() {
   async function openOne(pick) {
     setOpenPick(pick)
     setLinesLoading(true)
-    setPickedQty({}); setChosenAssets({}); setAvailableAssets({}); setAlreadyOnSite({}); setNote(pick.note || ''); setTicked({})
+    setPickedQty({}); setComments({}); setChosenAssets({}); setAvailableAssets({}); setAlreadyOnSite({}); setNote(pick.note || ''); setTicked({})
     setConfirmCancel(false); setConfirmDispatch(false)
     setBespokeDesc(''); setBespokeQty('1'); setBespokePo(''); setBespokeMethod('delivered'); setBespokeSupplier(''); setBespokeLocation('')
     setEditLineId(null)
@@ -115,12 +117,18 @@ export default function PickList() {
     // Start every quantity box blank. The op types what was actually picked,
     // rather than the box pre-claiming the full outstanding amount.
     const initialQty = {}
+    const initialComments = {}
     for (const l of ordered) {
       if (l.is_bespoke || l.products?.tracking_type !== 'asset') {
         initialQty[l.id] = ''
       }
+      // Comments are only taken against quantity-tracked, non-bespoke lines.
+      if (!l.is_bespoke && l.products?.tracking_type === 'quantity') {
+        initialComments[l.id] = l.comment || ''
+      }
     }
     setPickedQty(initialQty)
+    setComments(initialComments)
 
     const assetLines = ordered.filter((l) => !l.is_bespoke && l.products?.tracking_type === 'asset')
     const avail = {}
@@ -149,7 +157,7 @@ export default function PickList() {
     setLinesLoading(false)
   }
 
-  function back() { setOpenPick(null); setLines([]) }
+  function back() { setOpenPick(null); setLines([]); setComments({}) }
 
   function toggleAsset(lineId, assetId) {
     const cur = chosenAssets[lineId] || {}
@@ -187,6 +195,32 @@ export default function PickList() {
       for (const l of ordered) {
         if (next[l.id] == null && (l.is_bespoke || l.products?.tracking_type !== 'asset')) {
           next[l.id] = ''   // new lines start blank too
+        }
+      }
+      return next
+    })
+  }
+
+  // Items already parsed and reviewed by POUploadPanel, added in one batch
+  // insert. Delivery method defaults to delivered, same reasoning as the
+  // single-item adder above.
+  async function addFromPO(items) {
+    setError(null)
+    const rows = items.map((it) => ({
+      pick_id: openPick.id, product_id: null, is_bespoke: true,
+      description: it.description, qty: it.qty, picked_qty: 0, line_status: 'open',
+      po_number: it.po_number, delivery_method: 'delivered',
+      supplier_name: null, supplier_location: null,
+    }))
+    const { error } = await supabase.from('pick_lines').insert(rows)
+    if (error) { setError(error.message); return }
+    const ordered = await loadLines(openPick.id)
+    setLines(ordered)
+    setPickedQty((prev) => {
+      const next = { ...prev }
+      for (const l of ordered) {
+        if (next[l.id] == null && (l.is_bespoke || l.products?.tracking_type !== 'asset')) {
+          next[l.id] = ''
         }
       }
       return next
@@ -234,7 +268,14 @@ export default function PickList() {
       }
       const already = Number(l.picked_qty || 0)
       const thisPass = Number(pickedQty[l.id] || 0)
-      return { line_id: l.id, product_id: l.product_id, picked_qty: already + thisPass, asset_ids: [] }
+      const payload = { line_id: l.id, product_id: l.product_id, picked_qty: already + thisPass, asset_ids: [] }
+      // Comments only travel for quantity-tracked, non-bespoke lines. Sending
+      // the key only when it's relevant lets commit_pick leave every other
+      // line's stored comment alone.
+      if (!l.is_bespoke && l.products?.tracking_type === 'quantity') {
+        payload.comment = (comments[l.id] || '').trim() || null
+      }
+      return payload
     })
   }
 
@@ -298,26 +339,44 @@ export default function PickList() {
     setOpenPick(null); setLines([])
   }
 
-  function exportShortfalls() {
-    const shortfalls = lines
-      .map((l) => ({ l, outstanding: Number(l.qty) - Number(l.picked_qty || 0) }))
-      .filter((x) => x.outstanding > 0)
-      .map(({ l, outstanding }) => ({
-        Code: l.is_bespoke ? '(bespoke)' : (l.products?.code || ''),
-        Product: l.is_bespoke ? l.description : (l.products?.name || ''),
-        Kind: l.is_bespoke ? 'bespoke' : (l.products?.tracking_type === 'asset' ? 'asset' : 'consumable'),
-        PO: l.is_bespoke ? (l.po_number || '') : '',
-        Supply: l.is_bespoke ? (l.delivery_method === 'collect_local' ? `Collect: ${l.supplier_name || ''} ${l.supplier_location || ''}`.trim() : 'Delivered') : '',
-        Wanted: l.qty,
-        Picked: l.picked_qty || 0,
-        Outstanding: outstanding,
-      }))
+  // Shared row-shaping so the shortfalls export and the full pick list export
+  // stay identical in column layout, differing only in which lines they include.
+  function lineToRow(l) {
+    const outstanding = Number(l.qty) - Number(l.picked_qty || 0)
+    return {
+      Code: l.is_bespoke ? '(bespoke)' : (l.products?.code || ''),
+      Product: l.is_bespoke ? l.description : (l.products?.name || ''),
+      Kind: l.is_bespoke ? 'bespoke' : (l.products?.tracking_type === 'asset' ? 'asset' : 'consumable'),
+      Location: l.is_bespoke ? '' : (l.products?.locations ? `${l.products.locations.code} — ${l.products.locations.name}` : ''),
+      PO: l.is_bespoke ? (l.po_number || '') : '',
+      Supply: l.is_bespoke ? (l.delivery_method === 'collect_local' ? `Collect: ${l.supplier_name || ''} ${l.supplier_location || ''}`.trim() : 'Delivered') : '',
+      Wanted: l.qty,
+      Picked: l.picked_qty || 0,
+      Outstanding: outstanding,
+      Status: l.line_status || '',
+      Comment: l.is_bespoke ? '' : (l.comment || ''),
+    }
+  }
+
+  function exportToExcel(rows, sheetName, filenamePrefix) {
     const job = openPick.projects ? `${openPick.projects.code}` : 'pick'
-    const worksheet = XLSX.utils.json_to_sheet(shortfalls)
+    const worksheet = XLSX.utils.json_to_sheet(rows)
     const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Shortfalls')
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName)
     const today = new Date().toISOString().slice(0, 10)
-    XLSX.writeFile(workbook, `shortfalls-${job}-${today}.xlsx`)
+    XLSX.writeFile(workbook, `${filenamePrefix}-${job}-${today}.xlsx`)
+  }
+
+  function exportShortfalls() {
+    const rows = lines
+      .filter((l) => Number(l.qty) - Number(l.picked_qty || 0) > 0)
+      .map(lineToRow)
+    exportToExcel(rows, 'Shortfalls', 'shortfalls')
+  }
+
+  function exportFullList() {
+    const rows = lines.map(lineToRow)
+    exportToExcel(rows, 'Pick list', 'pick-list')
   }
 
   if (loading) return <p>Loading picks…</p>
@@ -377,6 +436,23 @@ export default function PickList() {
       )
     }
 
+    // Comments only apply to quantity-tracked, non-bespoke lines, since those
+    // are the only lines that write a stock_movements row for the comment to
+    // travel onto. Asset and bespoke lines show a dash rather than a box.
+    const commentCell = (l) => {
+      const isQuantity = !l.is_bespoke && l.products?.tracking_type === 'quantity'
+      if (!isQuantity) return <span style={{ color: '#999' }}>—</span>
+      if (!workable) return <span>{l.comment || '—'}</span>
+      return (
+        <input
+          type="text" className="comment-inline"
+          value={comments[l.id] ?? ''}
+          onChange={(e) => setComments({ ...comments, [l.id]: e.target.value })}
+          placeholder="e.g. none in bay, substituted, damaged"
+        />
+      )
+    }
+
     const supplyLabel = (l) => {
       if (l.delivery_method === 'collect_local') {
         const parts = [l.supplier_name, l.supplier_location].filter(Boolean).join(', ')
@@ -403,13 +479,14 @@ export default function PickList() {
         {linesLoading ? <p>Loading lines…</p> : (
           <>
             <div className="list-actions" style={{ marginTop: '1rem' }}>
+              <button onClick={exportFullList} disabled={lines.length === 0}>Export pick list to Excel</button>
               <button onClick={exportShortfalls} disabled={!anyOutstanding}>Export shortfalls to Excel</button>
             </div>
 
             <h4 className="detail-subhead">Master list items ({standardLines.length})</h4>
             <table className="data-table">
               <thead>
-                <tr><th></th><th>Code</th><th>Product</th><th>Location</th><th className="num">Wanted</th><th className="num">Already</th><th>{workable ? 'Pick now' : 'Picked'}</th></tr>
+                <tr><th></th><th>Code</th><th>Product</th><th>Location</th><th className="num">Wanted</th><th className="num">Already</th><th>{workable ? 'Pick now' : 'Picked'}</th><th>Comment</th></tr>
               </thead>
               <tbody>
                 {standardLines.map((l) => {
@@ -424,6 +501,7 @@ export default function PickList() {
                       <td className="num">{l.qty}</td>
                       <td className="num">{already}</td>
                       <td>{pickCell(l)}</td>
+                      <td>{commentCell(l)}</td>
                     </tr>
                   )
                 })}
@@ -503,6 +581,8 @@ export default function PickList() {
                   </tbody>
                 </table>
               )}
+
+              {workable && <POUploadPanel onAdd={addFromPO} />}
 
               {workable && (
                 <div className="form-card" style={{ marginTop: '0.75rem', maxWidth: 640 }}>

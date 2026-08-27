@@ -168,6 +168,14 @@ body { margin: 0; background: #f4f5f7; color: #1a1a1a; }
   width: 70px; padding: 0.3rem; border: 1px solid #ccc; border-radius: 5px;
   text-align: right; font-size: 0.9rem;
 }
+.desc-inline {
+  width: 100%; padding: 0.40rem 0.65rem; border: 1px solid #ddd; border-radius: 5px;
+  font-size: 0.85rem;
+}
+.comment-inline {
+  width: 250px; padding: 0.40rem 0.65rem; border: 1px solid #ddd; border-radius: 5px;
+  font-size: 0.85rem;
+}
 .line-actions { text-align: right; }
 .line-flag { color: #8a6d00; font-size: 0.78rem; }
 .pick-empty { color: #666; }

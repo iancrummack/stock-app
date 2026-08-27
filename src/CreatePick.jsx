@@ -1,6 +1,7 @@
 // src/CreatePick.jsx
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
+import POUploadPanel from './POUploadPanel'
 
 const newKey = () => crypto.randomUUID()
 
@@ -134,6 +135,27 @@ export default function CreatePick() {
       ticked: false,
     }])
     setBDesc(''); setBQty('1'); setBPo(''); setBMethod('delivered'); setBSupplier(''); setBLocation('')
+  }
+
+  // Items already parsed and reviewed by POUploadPanel, delivery method
+  // defaults to delivered since these come off a supplier PO, not a
+  // local collection.
+  function addFromPO(items) {
+    setError(null)
+    setLines((prev) => [
+      ...prev,
+      ...items.map((it) => ({
+        key: newKey(),
+        kind: 'bespoke',
+        description: it.description,
+        qty: it.qty,
+        po_number: it.po_number,
+        delivery_method: 'delivered',
+        supplier_name: null,
+        supplier_location: null,
+        ticked: false,
+      })),
+    ])
   }
 
   function removeLine(key) { setLines((prev) => prev.filter((l) => l.key !== key)) }
@@ -335,6 +357,8 @@ export default function CreatePick() {
           <button onClick={addBespoke}>Add bespoke item</button>
         </div>
       </div>
+
+      <POUploadPanel onAdd={addFromPO} />
 
       {/* ---- Staged lines ---- */}
       <div style={{ marginTop: '1.5rem' }}>
