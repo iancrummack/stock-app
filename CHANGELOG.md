@@ -2,6 +2,14 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.17.0] - 2026-08-27
+
+### Added
+- Upload a PO PDF to pull bespoke pick line items straight off a 7Formation Material Order, on both Create pick and an open pick in Pick lists. Reads item description and quantity per line and the PO number, staged in an editable, tick-to-include list for review before anything is added, nothing commits straight off the parse.
+
+### Changed
+- Bespoke description input (staged PO review list) restyled to match the app's inline-field convention, lighter grey border, 5px corners, tighter padding.
+
 ## [0.16.0] - 2026-08-27
 
 ### Added
