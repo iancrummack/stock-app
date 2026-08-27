@@ -2,6 +2,12 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.16.0] - 2026-08-27
+
+### Added
+- Pick owner field, required when creating a pick (upload and manual create), lays the groundwork for status-change email notifications
+- Notify-on-new-pick flag on logins (Roles screen), lets any login opt in to being emailed when a pick list is created
+
 ## [0.15.0]  - 2026-08-13
 
 ### Added
