@@ -32,6 +32,7 @@ import Dashboard from './Dashboard'
 import Insights from './Insights'
 import CostReport from './CostReport'
 import StockLossReport from './StockLossReport'
+import AssetHistory from './AssetHistory'
 import './App.css'
 
 // Screens, unchanged — just the component for each key.
@@ -64,6 +65,7 @@ const SCREENS = {
   insights: Insights,
   costreport: CostReport,
   stockloss: StockLossReport,
+  assethistory: AssetHistory,
 }
 
 // The same screens, now organised into named groups for the sidebar.
@@ -86,6 +88,7 @@ const NAV_GROUPS = [
     { key: 'assetintake', label: 'Asset intake' },
     { key: 'uncoded',     label: 'Uncoded assets' },
     { key: 'compliance',  label: 'Compliance' },
+    { key: 'assethistory', label: 'Asset history' },
   ]},
   { heading: 'Movements', items: [
     { key: 'picklist',    label: 'Pick lists' },
