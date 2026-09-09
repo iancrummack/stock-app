@@ -2,6 +2,14 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.18.1] - 2026-09-09
+
+### Added
+- `Finance` group added to the Roles screen's permission catalogue, covering Cost report and Stock lost report. Both screens were previously ungated, visible to every role regardless of permissions, so access to them can now be ticked per role like every other screen.
+
+### Fixed
+- Cost report exports (summary and item-level detail) wrote their date columns as text rather than real Excel dates. The summary export's Month column and the item-level export's Date column are now genuine Excel dates, shown as mmmm/yyyy and dd/mm/yy respectively, and sort/filter correctly in Excel.
+
 ## [0.18.0] - 2026-09-01
 
 ### Added

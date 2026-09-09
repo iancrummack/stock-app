@@ -21,6 +21,7 @@ const SCREEN_CATALOGUE = [
     { key: 'assetstocklevels', label: 'Asset stock levels' },
     { key: 'assetintake', label: 'Asset intake' },
     { key: 'uncoded', label: 'Uncoded assets' },
+    { key: 'assethistory', label: 'Asset history' },
     { key: 'assetmove', label: 'Asset move' },
     { key: 'compliance', label: 'Compliance' },
   ]},
@@ -31,6 +32,10 @@ const SCREEN_CATALOGUE = [
     { key: 'pickcreate', label: 'Create pick' },
     { key: 'pickupload', label: 'Upload pick list' },
     { key: 'picklist', label: 'Pick lists' },
+  ]},
+    { group: 'Finance', screens: [
+    { key: 'costreport', label: 'Cost report' },
+    { key: 'stockloss', label: 'Stock lost' },
   ]},
   { group: 'Admin', screens: [
     { key: 'products', label: 'Products' },

@@ -45,6 +45,37 @@ export default function CostReport() {
   const costLabel = (v) => `£${Number(v || 0).toFixed(2)}`
   const hasCost = (r) => r.unit_cost !== null && r.unit_cost !== undefined
 
+  // Excel stores dates as a plain day-count number with no timezone, so we
+  // build the JS Date from calendar components rather than parsing/printing
+  // through a timezone, then apply a display format to the cell. That's how
+  // the export gets a real, sortable/filterable Excel date instead of text,
+  // in whatever format we like.
+  const excelDateFromDateOnly = (s) => {
+    if (!s) return null
+    const [y, m, d] = String(s).split('-').map(Number)
+    if (!y || !m || !d) return null
+    return new Date(Date.UTC(y, m - 1, d))
+  }
+  const excelDateFromTimestamp = (ts) => {
+    if (!ts) return null
+    const dt = new Date(ts)
+    if (isNaN(dt.getTime())) return null
+    // Use the local calendar date (matching how it's shown elsewhere in the
+    // app), encoded as a timezone-free date-only value for Excel.
+    return new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate()))
+  }
+  function applyDateFormat(worksheet, colIndex, rowCount, format) {
+    // SheetJS writes a JS Date as a plain number cell (t: 'n') carrying the
+    // Excel day-serial, not a 'd' cell, so this doesn't gate on cell type —
+    // any cell present in this column at export time is that date value,
+    // and a blank row (no date) simply has no cell to touch.
+    for (let i = 0; i < rowCount; i++) {
+      const cellRef = XLSX.utils.encode_cell({ r: i + 1, c: colIndex })
+      const cell = worksheet[cellRef]
+      if (cell) cell.z = format
+    }
+  }
+
   const visible = useMemo(() => {
     return rows.filter((r) => {
       if (!showZero && Number(r.total_cost) === 0) return false
@@ -69,13 +100,15 @@ export default function CostReport() {
 
   function exportSummary() {
     // Real numbers here, not .toFixed() strings, so SUM/SUBTOTAL work in Excel.
+    // Month is a real Excel date (displayed as mmmm/yyyy), not text.
     const exportRows = visible.map((r) => ({
       'Contract code': r.project_code,
       'Contract name': r.project_name,
-      Month: monthLabel(r.cost_month),
+      Month: excelDateFromDateOnly(r.cost_month),
       'Total cost (£)': Number(r.total_cost || 0),
     }))
     const worksheet = XLSX.utils.json_to_sheet(exportRows)
+    applyDateFormat(worksheet, 2, exportRows.length, 'mmmm yyyy')
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Cost report')
     const today = new Date().toISOString().slice(0, 10)
@@ -100,8 +133,9 @@ export default function CostReport() {
       items = items.filter((r) => `${r.project_code || ''} ${r.project_name || ''}`.toLowerCase().includes(qq))
     }
 
+    // Date is a real Excel date (displayed as dd/mm/yy), not text.
     const exportRows = items.map((r) => ({
-      Date: new Date(r.created_at).toLocaleDateString(),
+      Date: excelDateFromTimestamp(r.created_at),
       'Contract code': r.project_code,
       'Contract name': r.project_name,
       Product: `${r.product_code} — ${r.product_name}`,
@@ -111,6 +145,7 @@ export default function CostReport() {
       'Line cost (£)': Number(r.line_cost || 0),
     }))
     const worksheet = XLSX.utils.json_to_sheet(exportRows)
+    applyDateFormat(worksheet, 0, exportRows.length, 'dd/mm/yy')
     const workbook = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Cost detail')
     const today = new Date().toISOString().slice(0, 10)
