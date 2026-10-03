@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from './supabaseClient'
+import OwnerSelect from './OwnerSelect'
 
 const SHEET_NAME = 'Site Set Up & Signage'
 const SHEET_PHASE2 = 'Materials'
@@ -20,6 +21,9 @@ export default function PickUpload() {
   const [done, setDone] = useState(null)
   const [showFlagged, setShowFlagged] = useState(false)
   const [dupeAcknowledged, setDupeAcknowledged] = useState(false)
+  // Deliberately kept between uploads, so a batch of lists loaded on
+  // another buyer's behalf doesn't need the owner picking every time.
+  const [ownerId, setOwnerId] = useState('')   // '' = me, the database defaults it
 
   function findByLabel(rows, label) {
     for (let r = 0; r < rows.length; r++) {
@@ -283,6 +287,8 @@ export default function PickUpload() {
       project_id: result.project ? result.project.id : null,
       collection_date: result.collectionDate,
       status: 'open',
+      // Left out when blank, so the database sets the owner to the logged-in user.
+      ...(ownerId ? { owner_id: ownerId } : {}),
     }).select().single()
     if (pErr) { setError(pErr.message); setCreating(false); return }
 
@@ -331,6 +337,7 @@ export default function PickUpload() {
                 {result.flagged.length > 0 && <strong style={{ color: '#b71c1c' }}> · {result.flagged.length} flagged</strong>}
               </div>
             </div>
+            <OwnerSelect value={ownerId} onChange={setOwnerId} disabled={creating} />
           </div>
 
           {result.dateEchoesPhase1 && (

@@ -2,6 +2,24 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
+## [0.19.0] - 2026-10-03
+
+### Added
+- Notification bell in the header, showing a red count of unread notifications. The dropdown lists recent notifications, unread in bold; clicking one marks it read and opens that pick. "Mark all read" clears only your own list. Refreshes every minute and when the browser tab regains focus.
+- Notifications for pick changes: a new pick, any status change, an owner change, and items added to an existing pick (one notification per batch, not per line). The person making the change is never notified. Logins with notify-on-new-pick also hear about every new pick.
+- Follow / Following button on an open pick, so anyone can opt in to a pick's notifications. The owner and creator follow automatically. Following is per login, so it never affects anyone else.
+- Pick owner selection on Create pick and Upload pick list, defaulting to the logged-in user. The chosen owner is kept between uploads for loading a batch of lists on another buyer's behalf.
+- Reassign the owner of an open pick (holiday cover), notifying followers and making the new owner a follower.
+- Owner column on the Pick lists table.
+- "Can own picks" tick box per login on the Roles screen, controlling who appears in the owner lists, independent of role.
+- Pick change history recorded in the background (creation, status, owner, and line additions, edits and removals), ready for a future change history view.
+
+### Changed
+- Every pick now always has an owner, enforced by the database, defaulting to the logged-in user. Existing picks were backfilled with their creator as owner.
+
+### Fixed
+- Ready to dispatch, Picked as far as possible and Dispatch each changed the status twice, briefly passing through In progress. The save and the status change now happen in one step, so each click is one status change and one notification.
+
 ## [0.18.1] - 2026-09-09
 
 ### Added

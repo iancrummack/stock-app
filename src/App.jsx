@@ -33,6 +33,7 @@ import Insights from './Insights'
 import CostReport from './CostReport'
 import StockLossReport from './StockLossReport'
 import AssetHistory from './AssetHistory'
+import NotificationBell from './NotificationBell'
 import './App.css'
 
 // Screens, unchanged — just the component for each key.
@@ -132,6 +133,7 @@ export default function App() {
   const [allowedScreens, setAllowedScreens] = useState(null)   // null = not yet loaded / fail-open
   const [isSuper, setIsSuper] = useState(false)
   const [resetMode, setResetMode] = useState(false)
+  const [openPickId, setOpenPickId] = useState(null)   // set by the bell, consumed by PickList
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
@@ -173,6 +175,12 @@ export default function App() {
   function pick(key) {
     setView(key)
     setNavOpen(false)        // choosing a screen closes the phone menu
+  }
+
+  // A notification was clicked: go to Pick lists and open that pick
+  function openPickFromBell(pickId) {
+    setOpenPickId(pickId)
+    pick('picklist')
   }
 
   if (loading) return <div className="app-loading">Loading…</div>
@@ -237,6 +245,7 @@ export default function App() {
           {showChangelog && <ChangelogModal onClose={() => setShowChangelog(false)} />}
         </div>
         <div className="app-user">
+          <NotificationBell onOpenPick={openPickFromBell} />
           <span className="user-email">{session.user.email}</span>
           <button onClick={handleLogout}>Sign out</button>
         </div>
@@ -283,6 +292,8 @@ export default function App() {
             pickForm={pickForm}
             setPickForm={setPickForm}
             resetPick={() => setPickForm(EMPTY_PICK)}
+            openPickId={openPickId}
+            onOpenPickHandled={() => setOpenPickId(null)}
           />
         </main>
       </div>

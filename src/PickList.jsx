@@ -29,13 +29,22 @@ function ukDate(d) {
   return `${day}-${m}-${y}`
 }
 
-export default function PickList() {
+function personLabel(p) { return p ? (p.name || p.email || 'Unnamed login') : '—' }
+
+export default function PickList({ openPickId, onOpenPickHandled }) {
   const [picks, setPicks] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showAll, setShowAll] = useState(false)
 
   const [people, setPeople] = useState([])
+
+  // Ownership and following
+  const [me, setMe] = useState(null)              // logged-in user id
+  const [ownerOptions, setOwnerOptions] = useState([])   // profiles flagged can_own_picks
+  const [following, setFollowing] = useState(false)
+  const [followBusy, setFollowBusy] = useState(false)
+  const [ownerSaving, setOwnerSaving] = useState(false)
 
   const [openPick, setOpenPick] = useState(null)
   const [lines, setLines] = useState([])
@@ -74,18 +83,38 @@ export default function PickList() {
     setLoading(true); setError(null)
     const { data, error } = await supabase
       .from('picks')
-      .select('id, collection_date, status, note, holder_id, project_id, projects(code, name)')
+      .select('id, collection_date, status, note, holder_id, project_id, owner_id, projects(code, name), owner:profiles!picks_owner_id_fkey(id, name, email)')
       .order('collection_date', { ascending: true })
     if (error) setError(error.message)
     else setPicks(data || [])
     setLoading(false)
+    return data || []
   }
 
   useEffect(() => {
     loadPicks()
     supabase.from('people').select('id, name, can_hold_assets, is_active').eq('is_active', true).order('name')
       .then(({ data }) => setPeople(data || []))
+    supabase.auth.getUser().then(({ data: { user } }) => setMe(user?.id || null))
+    supabase.from('profiles').select('id, name, email').eq('can_own_picks', true).order('name')
+      .then(({ data }) => setOwnerOptions(data || []))
   }, [])
+
+  // Opened from a notification: fetch fresh picks, then open that pick.
+  useEffect(() => {
+    if (!openPickId) return
+    let cancelled = false
+    ;(async () => {
+      const fresh = await loadPicks()
+      if (cancelled) return
+      const target = fresh.find((p) => p.id === openPickId)
+      if (target) openOne(target)
+      else setError(`Pick ${openPickId} couldn't be found.`)
+      if (onOpenPickHandled) onOpenPickHandled()
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openPickId])
 
   async function loadLines(pickId) {
     const { data } = await supabase
@@ -102,14 +131,24 @@ export default function PickList() {
     return [...standard, ...bespoke]
   }
 
+  async function loadFollowing(pickId) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setFollowing(false); return }
+    const { data } = await supabase.from('pick_follows').select('pick_id')
+      .eq('pick_id', pickId).eq('user_id', user.id).maybeSingle()
+    setFollowing(!!data)
+  }
+
   async function openOne(pick) {
     setOpenPick(pick)
+    setError(null)
     setLinesLoading(true)
     setPickedQty({}); setComments({}); setChosenAssets({}); setAvailableAssets({}); setAlreadyOnSite({}); setNote(pick.note || ''); setTicked({})
     setConfirmCancel(false); setConfirmDispatch(false)
     setBespokeDesc(''); setBespokeQty('1'); setBespokePo(''); setBespokeMethod('delivered'); setBespokeSupplier(''); setBespokeLocation('')
     setEditLineId(null)
     setHolderId(pick.holder_id ? String(pick.holder_id) : '')
+    loadFollowing(pick.id)
 
     const ordered = await loadLines(pick.id)
     setLines(ordered)
@@ -158,6 +197,32 @@ export default function PickList() {
   }
 
   function back() { setOpenPick(null); setLines([]); setComments({}) }
+
+  // Follow or unfollow this pick for the logged-in user only.
+  async function toggleFollow() {
+    if (!me || !openPick) return
+    setFollowBusy(true); setError(null)
+    const { error } = following
+      ? await supabase.from('pick_follows').delete().eq('pick_id', openPick.id).eq('user_id', me)
+      : await supabase.from('pick_follows').insert({ pick_id: openPick.id, user_id: me })
+    setFollowBusy(false)
+    if (error) { setError(error.message); return }
+    setFollowing(!following)
+  }
+
+  // Reassign the owner, e.g. holiday cover. The database records the change,
+  // makes the new owner a follower and notifies followers.
+  async function changeOwner(newOwnerId) {
+    if (!newOwnerId || newOwnerId === openPick.owner_id) return
+    setOwnerSaving(true); setError(null)
+    const { error } = await supabase.from('picks').update({ owner_id: newOwnerId }).eq('id', openPick.id)
+    setOwnerSaving(false)
+    if (error) { setError(error.message); return }
+    const fresh = await loadPicks()
+    const updated = fresh.find((p) => p.id === openPick.id)
+    if (updated) setOpenPick(updated)
+    if (newOwnerId === me) setFollowing(true)
+  }
 
   function toggleAsset(lineId, assetId) {
     const cur = chosenAssets[lineId] || {}
@@ -279,25 +344,23 @@ export default function PickList() {
     })
   }
 
-  // Every forward action saves first, then sets the status. commit_pick moves
-  // only newly-typed stock, and a blank box (the state after every save) moves
-  // nothing, so this can't double-count. The point is that the op can't lose a
-  // final pick by jumping straight to a status button, the save is folded in.
+  // Every forward action saves and sets the status in one call. commit_pick
+  // moves only newly-typed stock, and a blank box moves nothing, so this can't
+  // double-count. Doing both in one step means one status change per click,
+  // so followers get one notification, not an "In progress" first.
   async function commitThenStatus(newStatus) {
     setError(null); setWorking(true)
     if (holderId) {
       await supabase.from('picks').update({ holder_id: Number(holderId) }).eq('id', openPick.id)
     }
-    const { error: commitErr } = await supabase.rpc('commit_pick', {
+    const { error: commitErr } = await supabase.rpc('commit_pick_to_status', {
       p_pick_id: openPick.id,
       p_lines: buildPayload(),
       p_note: note || null,
-      p_finalise: false,
+      p_status: newStatus,
     })
-    if (commitErr) { setWorking(false); setError(commitErr.message); return }
-    const { error: statusErr } = await supabase.from('picks').update({ status: newStatus }).eq('id', openPick.id)
     setWorking(false)
-    if (statusErr) { setError(statusErr.message); return }
+    if (commitErr) { setError(commitErr.message); return }
     await loadPicks()
     setOpenPick(null); setLines([]); setConfirmDispatch(false)
   }
@@ -388,6 +451,11 @@ export default function PickList() {
     const standardLines = lines.filter((l) => !l.is_bespoke)
     const bespokeLines = lines.filter((l) => l.is_bespoke)
 
+    // The current owner always appears, even if no longer flagged to own picks.
+    const ownerChoices = ownerOptions.some((o) => o.id === openPick.owner_id) || !openPick.owner
+      ? ownerOptions
+      : [openPick.owner, ...ownerOptions]
+
     const pickCell = (l) => {
       const isAsset = !l.is_bespoke && l.products?.tracking_type === 'asset'
       const already = Number(l.picked_qty || 0)
@@ -471,6 +539,25 @@ export default function PickList() {
           </h3>
           <div style={{ fontSize: '0.85rem', color: '#666' }}>
             Collection: {ukDate(openPick.collection_date)} · Status: {STATUS_LABEL[openPick.status] || openPick.status}
+          </div>
+          <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <span>Owner:</span>
+            {workable ? (
+              <select
+                value={openPick.owner_id || ''}
+                onChange={(e) => changeOwner(e.target.value)}
+                disabled={ownerSaving}
+                style={{ fontSize: '0.85rem' }}
+              >
+                {ownerChoices.map((o) => <option key={o.id} value={o.id}>{personLabel(o)}</option>)}
+              </select>
+            ) : (
+              <strong>{personLabel(openPick.owner)}</strong>
+            )}
+            <button className="btn-secondary" onClick={toggleFollow} disabled={followBusy || !me} style={{ fontSize: '0.8rem', padding: '0.2rem 0.6rem' }}
+              title={following ? 'You get notifications for this pick. Click to stop.' : 'Get notifications when this pick changes'}>
+              {following ? '★ Following' : '☆ Follow'}
+            </button>
           </div>
         </div>
 
@@ -710,7 +797,7 @@ export default function PickList() {
       ) : (
         <table className="data-table">
           <thead>
-            <tr><th>Job</th><th>Collection</th><th>Status</th><th></th></tr>
+            <tr><th>Job</th><th>Collection</th><th>Status</th><th>Owner</th><th></th></tr>
           </thead>
           <tbody>
             {visible.map((p) => {
@@ -720,6 +807,7 @@ export default function PickList() {
                   <td>{p.projects ? `${p.projects.code} — ${p.projects.name}` : '—'}</td>
                   <td>{ukDate(p.collection_date)}</td>
                   <td>{STATUS_LABEL[p.status] || p.status}</td>
+                  <td>{personLabel(p.owner)}</td>
                   <td><button className="btn-link" onClick={() => openOne(p)}>{workable ? 'Open pick' : 'View'}</button></td>
                 </tr>
               )

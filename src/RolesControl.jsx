@@ -61,7 +61,7 @@ export default function RolesControl() {
     const [r, rs, p] = await Promise.all([
       supabase.from('roles').select('id, code, name, rank').order('rank', { ascending: false }),
       supabase.from('role_screens').select('role_id, screen_key'),
-      supabase.from('profiles').select('id, email, role_id').order('email'),
+      supabase.from('profiles').select('id, name, email, role_id, can_own_picks').order('email'),
     ])
     if (r.error) setError(r.error.message)
     setRoles(r.data || [])
@@ -99,6 +99,17 @@ export default function RolesControl() {
     const { error } = await supabase.from('profiles').update({ role_id: roleId ? Number(roleId) : null }).eq('id', profileId)
     if (error) setError(error.message)
     else await loadAll()
+  }
+
+  // Pick ownership is a permission, separate from role, so someone who has
+  // moved role but still covers buying can keep it.
+  async function setCanOwnPicks(profileId, on) {
+    setError(null)
+    setBusyKey(`own:${profileId}`)
+    const { error } = await supabase.from('profiles').update({ can_own_picks: on }).eq('id', profileId)
+    if (error) setError(error.message)
+    else await loadAll()
+    setBusyKey(null)
   }
 
   if (loading) return <p>Loading roles…</p>
@@ -157,13 +168,14 @@ export default function RolesControl() {
       <h3 className="form-title" style={{ marginTop: '2rem' }}>Logins and their roles</h3>
       <p className="detail-empty" style={{ marginBottom: '1rem' }}>
         People appear here after they've logged in at least once. Set each login's role.
+        Tick "Can own picks" for anyone who should appear in the pick owner list, whatever their role.
       </p>
 
       {profiles.length === 0 ? (
         <p>No logins yet.</p>
       ) : (
         <table className="data-table">
-          <thead><tr><th>Login (email)</th><th>Role</th></tr></thead>
+          <thead><tr><th>Login (email)</th><th>Role</th><th style={{ textAlign: 'center' }}>Can own picks</th></tr></thead>
           <tbody>
             {profiles.map((pf) => (
               <tr key={pf.id}>
@@ -173,6 +185,14 @@ export default function RolesControl() {
                     <option value="">— no role —</option>
                     {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
+                </td>
+                <td style={{ textAlign: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={!!pf.can_own_picks}
+                    disabled={busyKey === `own:${pf.id}`}
+                    onChange={(e) => setCanOwnPicks(pf.id, e.target.checked)}
+                  />
                 </td>
               </tr>
             ))}

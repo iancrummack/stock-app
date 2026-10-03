@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import POUploadPanel from './POUploadPanel'
+import OwnerSelect from './OwnerSelect'
 
 const newKey = () => crypto.randomUUID()
 
@@ -17,6 +18,7 @@ export default function CreatePick() {
   const [projectId, setProjectId] = useState('')
   const [collectionDate, setCollectionDate] = useState('')
   const [holderId, setHolderId] = useState('')
+  const [ownerId, setOwnerId] = useState('')   // '' = me, the database defaults it
   const [note, setNote] = useState('')
 
   // Staged lines, held in React until Create is pressed
@@ -167,7 +169,7 @@ export default function CreatePick() {
   }
 
   function resetAll() {
-    setProjectId(''); setCollectionDate(''); setHolderId(''); setNote('')
+    setProjectId(''); setCollectionDate(''); setHolderId(''); setOwnerId(''); setNote('')
     setLines([]); setError(null)
     setSearch(''); setProductId(''); setProductQty('1')
     setKitId(''); setKitQty('1')
@@ -189,6 +191,8 @@ export default function CreatePick() {
       source: 'manual',
       holder_id: holderId ? Number(holderId) : null,
       note: note.trim() || null,
+      // Left out when blank, so the database sets the owner to the logged-in user.
+      ...(ownerId ? { owner_id: ownerId } : {}),
     }).select().single()
     if (pErr) { setError(pErr.message); setCreating(false); return }
 
@@ -258,6 +262,8 @@ export default function CreatePick() {
           <label>Collection date</label>
           <input type="date" value={collectionDate} onChange={(e) => setCollectionDate(e.target.value)} />
         </div>
+
+        <OwnerSelect value={ownerId} onChange={setOwnerId} disabled={creating} />
 
         <div className="form-field">
           <label>Holder (site manager) — assigned to all assets on this job</label>
