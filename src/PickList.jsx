@@ -62,6 +62,11 @@ export default function PickList({ openPickId, onOpenPickHandled }) {
   const [confirmDispatch, setConfirmDispatch] = useState(false)
   const [ticked, setTicked] = useState({})   // visual only, never saved
 
+  // Cancel returns everything saved against the pick. No editing, a part
+  // cancel is an amendment and is handled elsewhere.
+  const [cancelReason, setCancelReason] = useState('')
+  const [notice, setNotice] = useState(null)   // shown on the list after a cancel
+
   // Bespoke line adder
   const [bespokeDesc, setBespokeDesc] = useState('')
   const [bespokeQty, setBespokeQty] = useState('1')
@@ -83,7 +88,7 @@ export default function PickList({ openPickId, onOpenPickHandled }) {
     setLoading(true); setError(null)
     const { data, error } = await supabase
       .from('picks')
-      .select('id, collection_date, status, note, holder_id, project_id, owner_id, projects(code, name), owner:profiles!picks_owner_id_fkey(id, name, email)')
+      .select('id, created_at, collection_date, status, note, holder_id, project_id, owner_id, projects(code, name), owner:profiles!picks_owner_id_fkey(id, name, email)')
       .order('collection_date', { ascending: true })
     if (error) setError(error.message)
     else setPicks(data || [])
@@ -139,12 +144,16 @@ export default function PickList({ openPickId, onOpenPickHandled }) {
     setFollowing(!!data)
   }
 
+  function resetCancel() {
+    setConfirmCancel(false); setCancelReason('')
+  }
+
   async function openOne(pick) {
     setOpenPick(pick)
-    setError(null)
+    setError(null); setNotice(null)
     setLinesLoading(true)
     setPickedQty({}); setComments({}); setChosenAssets({}); setAvailableAssets({}); setAlreadyOnSite({}); setNote(pick.note || ''); setTicked({})
-    setConfirmCancel(false); setConfirmDispatch(false)
+    resetCancel(); setConfirmDispatch(false)
     setBespokeDesc(''); setBespokeQty('1'); setBespokePo(''); setBespokeMethod('delivered'); setBespokeSupplier(''); setBespokeLocation('')
     setEditLineId(null)
     setHolderId(pick.holder_id ? String(pick.holder_id) : '')
@@ -196,7 +205,7 @@ export default function PickList({ openPickId, onOpenPickHandled }) {
     setLinesLoading(false)
   }
 
-  function back() { setOpenPick(null); setLines([]); setComments({}) }
+  function back() { setOpenPick(null); setLines([]); setComments({}); resetCancel() }
 
   // Follow or unfollow this pick for the logged-in user only.
   async function toggleFollow() {
@@ -393,13 +402,40 @@ export default function PickList({ openPickId, onOpenPickHandled }) {
     ))
   }
 
+  // Lines with stock saved against them, the only ones a cancel can return.
+  function savedLines() {
+    return lines.filter((l) => !l.is_bespoke && Number(l.picked_qty || 0) > 0)
+  }
+
+  function startCancel() {
+    setError(null)
+    setConfirmCancel(true)
+  }
+
+  // The database works out what comes back: every consumable in full at the
+  // job's cost, and every asset unit this pick sent. Nothing is chosen here.
   async function cancelPick() {
     setError(null); setWorking(true)
-    const { error } = await supabase.from('picks').update({ status: 'cancelled' }).eq('id', openPick.id)
+    const { data, error } = await supabase.rpc('cancel_pick', {
+      p_pick_id: openPick.id,
+      p_reason: cancelReason.trim() || null,
+    })
     setWorking(false)
     if (error) { setError(error.message); return }
+    const job = openPick.projects ? openPick.projects.code : `Pick ${openPick.id}`
+    const parts = []
+    if (data?.consumable_units > 0) parts.push(`${data.consumable_units} consumable item${data.consumable_units === 1 ? '' : 's'} returned to stock`)
+    if (data?.assets_returned > 0) parts.push(`${data.assets_returned} asset${data.assets_returned === 1 ? '' : 's'} returned to store`)
+    let msg = `${job} cancelled.${parts.length ? ' ' + parts.join(', ') + '.' : ''}`
+    let warn = false
+    if (data?.assets_not_found > 0) {
+      msg += ` ${data.assets_not_found} asset${data.assets_not_found === 1 ? '' : 's'} couldn't be traced back to this pick and still need returning by hand: ${(data.not_found_detail || []).join(', ')}.`
+      warn = true
+    }
+    resetCancel()
     await loadPicks()
     setOpenPick(null); setLines([])
+    setNotice({ text: msg, warn })
   }
 
   // Shared row-shaping so the shortfalls export and the full pick list export
@@ -450,6 +486,7 @@ export default function PickList({ openPickId, onOpenPickHandled }) {
     const anyOutstanding = lines.some((l) => Number(l.qty) - Number(l.picked_qty || 0) > 0)
     const standardLines = lines.filter((l) => !l.is_bespoke)
     const bespokeLines = lines.filter((l) => l.is_bespoke)
+    const saved = savedLines()
 
     // The current owner always appears, even if no longer flagged to own picks.
     const ownerChoices = ownerOptions.some((o) => o.id === openPick.owner_id) || !openPick.owner
@@ -752,7 +789,7 @@ export default function PickList({ openPickId, onOpenPickHandled }) {
                   )}
 
                   {!confirmCancel && !confirmDispatch && (
-                    <button className="btn-secondary" onClick={() => setConfirmCancel(true)} disabled={working}>Cancel job</button>
+                    <button className="btn-secondary" onClick={startCancel} disabled={working}>Cancel job</button>
                   )}
                 </div>
 
@@ -769,10 +806,40 @@ export default function PickList({ openPickId, onOpenPickHandled }) {
 
                 {confirmCancel && !confirmDispatch && (
                   <div className="form-warning" style={{ marginTop: '0.75rem' }}>
-                    You're cancelling this pick. It drops off the live list but isn't deleted. Are you sure?
+                    {saved.length === 0 ? (
+                      <>You're cancelling this pick. Nothing has been saved against it, so no stock needs returning. It drops off the live list but isn't deleted. Are you sure?</>
+                    ) : (
+                      <>
+                        <div style={{ marginBottom: '0.5rem' }}>
+                          You're cancelling this pick. Everything saved against it comes back below, consumables to stock and assets to their home bay, and the cost comes off the job.
+                          If only part of the job is changing, don't cancel, amend the list instead. Bespoke items are not affected.
+                        </div>
+                        <table className="data-table">
+                          <thead>
+                            <tr><th>Code</th><th>Product</th><th>Kind</th><th className="num">Returning</th></tr>
+                          </thead>
+                          <tbody>
+                            {saved.map((l) => (
+                              <tr key={l.id}>
+                                <td>{l.products?.code || '—'}</td>
+                                <td>{l.products?.name || '—'}</td>
+                                <td>{l.products?.tracking_type === 'asset' ? 'asset' : 'consumable'}</td>
+                                <td className="num">{Number(l.picked_qty || 0)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div className="form-field" style={{ marginTop: '0.5rem' }}>
+                          <label>Reason for cancelling (optional)</label>
+                          <input type="text" value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="e.g. client postponed works" />
+                        </div>
+                      </>
+                    )}
                     <div className="pick-commit-actions" style={{ marginTop: '0.5rem' }}>
-                      <button onClick={cancelPick} disabled={working} style={{ background: '#b71c1c' }}>Yes, cancel job</button>
-                      <button className="btn-secondary" onClick={() => setConfirmCancel(false)} disabled={working}>No, keep it</button>
+                      <button onClick={cancelPick} disabled={working} style={{ background: '#b71c1c' }}>
+                        {working ? 'Cancelling…' : (saved.length === 0 ? 'Yes, cancel job' : 'Yes, cancel job and return everything')}
+                      </button>
+                      <button className="btn-secondary" onClick={resetCancel} disabled={working}>No, keep it</button>
                     </div>
                   </div>
                 )}
@@ -788,6 +855,12 @@ export default function PickList({ openPickId, onOpenPickHandled }) {
 
   return (
     <div>
+      {notice && (
+        <div className={notice.warn ? 'form-warning' : 'form-success'} style={{ marginBottom: '0.75rem' }}>
+          {notice.text}
+          <button className="btn-link" onClick={() => setNotice(null)} style={{ marginLeft: '0.5rem' }}>Dismiss</button>
+        </div>
+      )}
       <label className="filter-toggle" style={{ display: 'block', marginBottom: '0.75rem', fontSize: '0.85rem' }}>
         <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} /> Show completed and cancelled too
       </label>

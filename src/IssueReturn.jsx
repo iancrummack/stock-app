@@ -16,11 +16,12 @@ export default function IssueReturn({ pickForm, setPickForm, resetPick }) {
   useEffect(() => {
     async function loadRef() {
       const [{ data: prods }, { data: projs }, { data: soh }] = await Promise.all([
-        supabase.from('products').select('id, code, name').eq('tracking_type', 'quantity').order('name'),
+        supabase.from('products').select('id, code, name, categories(charge_to_person)').eq('tracking_type', 'quantity').order('name'),
         supabase.from('projects').select('id, code, name').eq('is_active', true).order('code'),
         supabase.from('stock_levels').select('product_id, on_hand'),
       ])
-      setProducts(prods || [])
+      // Uniform (charge-to-person categories) never goes to a project, it has its own Issue uniform screen.
+      setProducts((prods || []).filter((p) => !p.categories?.charge_to_person))
       setProjects(projs || [])
       const map = {}
       ;(soh || []).forEach((r) => { map[r.product_id] = r.on_hand })

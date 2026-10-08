@@ -28,6 +28,7 @@ const SCREEN_CATALOGUE = [
   { group: 'Movements', screens: [
     { key: 'receipt', label: 'Receive stock' },
     { key: 'issue', label: 'Issue / return' },
+    { key: 'issueuniform', label: 'Issue uniform' },
     { key: 'assetmove', label: 'Asset move' },
     { key: 'pickcreate', label: 'Create pick' },
     { key: 'pickupload', label: 'Upload pick list' },
@@ -36,6 +37,7 @@ const SCREEN_CATALOGUE = [
     { group: 'Finance', screens: [
     { key: 'costreport', label: 'Cost report' },
     { key: 'stockloss', label: 'Stock lost' },
+    { key: 'uniformrecharge', label: 'Uniform recharge' },
   ]},
   { group: 'Admin', screens: [
     { key: 'products', label: 'Products' },

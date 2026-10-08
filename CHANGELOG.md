@@ -2,7 +2,48 @@
 
 All notable changes to the 7F Stock & Asset app are recorded here.
 
-## [0.19.0] - 2026-10-03
+## [0.21.3] - 2026-10-07
+
+### Changed
+- Cancelling a pick now always returns everything saved against it, with no option to return less. Consumables come back to stock in full at the cost the job was charged, so the job's cost is cleared back to the warehouse, and every asset unit the pick sent goes back to its home bay. A part cancel is an amendment to the list, not a cancel, and is handled separately.
+- The cancel confirm now shows a read-only list of what will come back, with an optional reason.
+- After a cancel, the pick list shows what was returned. Any asset unit that can't be traced back to the pick (for example one marked as fulfilled after being sent outside it) is named in the message and in the pick note, to return by hand.
+- New cancel_pick database function replaces cancel_pick_with_returns, which was removed.
+
+## [0.21.2] - 2026-10-08
+
+### Fixed
+- Closed public (not logged in) access to three database functions added since 0.10.1: commit_pick_to_status, issue_uniform and void_uniform_issue. They could previously be run with the app's public key alone, without logging in. Logged-in users are unaffected.
+- Closed the same access on the six pick history and notification trigger functions, which clears the matching security warnings. The triggers still fire as normal.
+- New database functions are no longer open to the public key by default, so this gap can't reopen each time a function is added.
+
+## [0.21.1] - 2026-10-08 - Cancel Returns Stock
+
+### Added
+- Cancelling a pick now returns its stock. If anything was saved against the pick, Cancel job opens a review listing what will come back, with consumable quantities defaulted to what was picked and editable down if something has already gone out or been used.
+- Asset lines on the cancel review list the units still on site on that job, pre-ticked where the pick sent them, untick any that aren't coming back. Returned assets go back to their home bay, in store, with no holder.
+- Optional reason on cancel, written onto the return movements, the asset history and the pick note.
+- cancel_pick_with_returns database function: cancel and returns happen in one atomic step, so a part-cancelled pick can't be left behind.
+
+### Changed
+- Consumable returns from a cancelled pick are costed at what the job was charged (its latest issue of that product), so the cost report nets back to zero.
+- A cancelled pick's picked quantities now show what is still out with the job after the returns, rather than what was originally picked.
+
+## [0.20.0] - 2026-10-05 - Uniform Update
+
+### Added
+- Issue uniform screen (Movements): uniform is issued to a named person, never a project. The person must be chosen before any item can be added, the item list shows uniform only, each line shows its charge at unit cost, and the commit button names who is being charged. Stock moves through the ledger as a normal issue, tagged to the person.
+- Uniform recharge screen (Finance): per person monthly totals for accounts, filterable by month and person, with an item list underneath. Excel export has a Summary sheet (person by month totals) and a Detail sheet (date, month, person, product, quantity, unit cost, charge, status, note), with real Excel dates and filters on.
+- Void a wrongly issued uniform line from the Uniform recharge screen, with a reason. Writes a reversing movement at the original cost rather than deleting, so stock goes back and the charge drops out while the history stays.
+- "Charge to person" flag on categories, set on Uniform, which drives everything above.
+- Issue uniform and Uniform recharge added to the Roles screen so access can be ticked per role.
+
+### Changed
+- Uniform no longer appears in the product lists on Issue / return or Create pick, and is left out when a kit containing it is added to a pick, with a message saying so.
+- The database now refuses any uniform stock movement or pick line against a project, as a backstop behind the screens.
+- stock_movements gains person_id and voids_movement_id, and a movement can no longer carry both a person and a project.
+
+## [0.19.0] - 2026-10-03 - Notification Update
 
 ### Added
 - Notification bell in the header, showing a red count of unread notifications. The dropdown lists recent notifications, unread in bold; clicking one marks it read and opens that pick. "Mark all read" clears only your own list. Refreshes every minute and when the browser tab regains focus.

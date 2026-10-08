@@ -33,6 +33,8 @@ import Insights from './Insights'
 import CostReport from './CostReport'
 import StockLossReport from './StockLossReport'
 import AssetHistory from './AssetHistory'
+import IssueUniform from './IssueUniform'
+import UniformRecharge from './UniformRecharge'
 import NotificationBell from './NotificationBell'
 import './App.css'
 
@@ -67,6 +69,8 @@ const SCREENS = {
   costreport: CostReport,
   stockloss: StockLossReport,
   assethistory: AssetHistory,
+  issueuniform: IssueUniform,
+  uniformrecharge: UniformRecharge,
 }
 
 // The same screens, now organised into named groups for the sidebar.
@@ -95,6 +99,7 @@ const NAV_GROUPS = [
     { key: 'picklist',    label: 'Pick lists' },
     { key: 'receipt',     label: 'Receive stock' },
     { key: 'issue',       label: 'Issue / return' },
+    { key: 'issueuniform', label: 'Issue uniform' },
     { key: 'assetmove',   label: 'Asset move' },
     { key: 'pickcreate',  label: 'Create pick' },
     { key: 'pickupload',  label: 'Upload pick list' },
@@ -102,6 +107,7 @@ const NAV_GROUPS = [
   { heading: 'Finance', items: [
     { key: 'costreport',  label: 'Cost report' },
     { key: 'stockloss',  label: 'Stock lost' },
+    { key: 'uniformrecharge', label: 'Uniform recharge' },
   ]},
    { heading: 'Admin', items: [
     { key: 'products',          label: 'Products' },

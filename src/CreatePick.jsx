@@ -49,13 +49,14 @@ export default function CreatePick() {
     async function load() {
       const [pr, pd, kt, ki, pe] = await Promise.all([
         supabase.from('projects').select('id, code, name').order('code'),
-        supabase.from('products').select('id, code, name, tracking_type').order('name'),
+        supabase.from('products').select('id, code, name, tracking_type, categories(charge_to_person)').order('name'),
         supabase.from('kits').select('id, code, name').order('code'),
-        supabase.from('kit_items').select('kit_id, qty, multiply, product_id, products(id, code, name, tracking_type)'),
+        supabase.from('kit_items').select('kit_id, qty, multiply, product_id, products(id, code, name, tracking_type, categories(charge_to_person))'),
         supabase.from('people').select('id, name, can_hold_assets, is_active').eq('is_active', true).order('name'),
       ])
       setProjects(pr.data || [])
-      setProducts(pd.data || [])
+      // Uniform is charged to a person, never a job, so it can't go on a pick.
+      setProducts((pd.data || []).filter((p) => !p.categories?.charge_to_person))
       setKits(kt.data || [])
       const grouped = {}
       for (const item of (ki.data || [])) {
@@ -111,11 +112,16 @@ export default function CreatePick() {
     const kit = kits.find((k) => String(k.id) === String(kitId))
     const comps = kitItems[Number(kitId)] || []
     if (comps.length === 0) { setError(`Kit "${kit?.code}" has no items defined.`); return }
+    const skipped = []
     for (const c of comps) {
       if (!c.products) continue
+      if (c.products.categories?.charge_to_person) { skipped.push(c.products.name); continue }
       // Fixed components (multiply = false) do not scale with the kit quantity.
       const lineQty = c.multiply === false ? Number(c.qty) : Number(c.qty) * q
       mergeStock(c.products, lineQty, kit.code)
+    }
+    if (skipped.length > 0) {
+      setError(`Kit added without ${skipped.join(', ')}. Uniform is charged to a person, use the Issue uniform screen.`)
     }
     setKitId(''); setKitQty('1')
   }
